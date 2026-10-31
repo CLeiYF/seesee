@@ -37,7 +37,7 @@ final class MockFetch: @unchecked Sendable {
 }
 
 /// 在同步测试里等待 async 结果（Core 不依赖主线程）
-func wait<T>(_ body: @escaping @Sendable () async throws -> T) throws -> T {
+func blocking<T>(_ body: @escaping @Sendable () async throws -> T) throws -> T {
     let sem = DispatchSemaphore(value: 0)
     nonisolated(unsafe) var out: Swift.Result<T, Error>!
     Task.detached {

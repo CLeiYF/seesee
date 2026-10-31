@@ -25,6 +25,10 @@ final class AppState {
 
     /// 启动时恢复最近一次使用的配置
     func restore(_ context: ModelContext) async {
+        // ponytail: 启动参数 `-config <url>` 直接加载，便于模拟器调试
+        if configURL.isEmpty, let url = UserDefaults.standard.string(forKey: "config") {
+            return await load(url, context: context)
+        }
         var d = FetchDescriptor<ConfigRecord>(sortBy: [SortDescriptor(\.time, order: .reverse)])
         d.fetchLimit = 1
         guard configURL.isEmpty, let last = try? context.fetch(d).first else { return }
