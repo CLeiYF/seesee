@@ -1,0 +1,65 @@
+import Foundation
+
+enum HTTP {
+    typealias Fetch = @Sendable (URLRequest) async throws -> Data
+
+    static let chrome = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+
+    /// 配置里的 `headers`：host 包含或正则匹配时注入
+    nonisolated(unsafe) static var hostHeaders: [HostHeader] = []
+
+    static let live: Fetch = { request in
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<400).contains(http.statusCode) {
+            throw URLError(.badServerResponse)
+        }
+        return data
+    }
+
+    static func get(_ url: String, query: [(String, String)] = [], headers: [String: String] = [:], timeout: TimeInterval = 15) throws -> URLRequest {
+        guard var comps = URLComponents(string: url.trimmingCharacters(in: .whitespaces)) else { throw URLError(.badURL) }
+        if !query.isEmpty {
+            comps.percentEncodedQueryItems = (comps.percentEncodedQueryItems ?? []) + query.map { URLQueryItem(name: encode($0.0), value: encode($0.1)) }
+        }
+        guard let u = comps.url else { throw URLError(.badURL) }
+        return request(u, headers: headers, timeout: timeout)
+    }
+
+    static func post(_ url: String, form: [(String, String)], headers: [String: String] = [:], timeout: TimeInterval = 15) throws -> URLRequest {
+        guard let u = URL(string: url) else { throw URLError(.badURL) }
+        var req = request(u, headers: headers, timeout: timeout)
+        req.httpMethod = "POST"
+        req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        req.httpBody = form.map { "\(encode($0.0))=\(encode($0.1))" }.joined(separator: "&").data(using: .utf8)
+        return req
+    }
+
+    private static func request(_ url: URL, headers: [String: String], timeout: TimeInterval) -> URLRequest {
+        var req = URLRequest(url: url, timeoutInterval: timeout)
+        req.setValue(chrome, forHTTPHeaderField: "User-Agent")
+        let host = url.host?.lowercased() ?? ""
+        for item in hostHeaders where item.matches(host) {
+            item.header.forEach { req.setValue($1, forHTTPHeaderField: $0) }
+        }
+        headers.forEach { req.setValue($1, forHTTPHeaderField: $0) }
+        return req
+    }
+
+    /// 与 OkHttp 一致：保留 RFC 3986 unreserved，其余全部编码
+    static func encode(_ s: String) -> String {
+        s.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? s
+    }
+
+    static func string(_ data: Data) -> String {
+        String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
+    }
+}
+
+struct HostHeader: Decodable {
+    let host: String
+    let header: [String: String]
+
+    func matches(_ value: String) -> Bool {
+        value.contains(host) || (try? Regex(host)).map { value.contains($0) } == true
+    }
+}

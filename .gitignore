@@ -1,0 +1,23 @@
+# 非业务文件
+docs/
+.claude/
+CLAUDE.md
+
+# macOS
+.DS_Store
+
+# Xcode（.xcodeproj 由 XcodeGen 从 project.yml 生成）
+*.xcodeproj/
+*.xcworkspace/
+!*.xcworkspace/contents.xcworkspacedata
+xcuserdata/
+DerivedData/
+build/
+*.xcresult
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# SPM（Package.resolved 保留，用于锁定依赖版本）
+.build/
+.swiftpm/
