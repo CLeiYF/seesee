@@ -23,12 +23,44 @@ struct DetailView: View {
         }
         .navigationTitle(route.name)
         .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
-        .fullScreenCover(item: $playing) { t in
-            if let site {
-                PlayerView(api: state.api(site), site: site, flags: t.flags, flag: t.flag, episode: t.episode, vipFlags: state.config.flags)
+        .toolbar {
+            if let vod {
+                let kept = state.library.isKept(keepItem(vod).id)
+                Button(kept ? "取消收藏" : "收藏", systemImage: kept ? "heart.fill" : "heart") {
+                    state.library.toggleKeep(keepItem(vod))
+                }
             }
         }
+        .task { await load() }
+        .fullScreenCover(item: $playing) { t in
+            if let site, let vod {
+                PlayerView(api: state.api(site), site: site, flags: t.flags, flag: t.flag, episode: t.episode,
+                           vipFlags: state.config.flags, resume: t.resume) { flag, episode, position, duration in
+                    state.library.record(HistoryItem(
+                        config: state.configURL, siteKey: route.siteKey, vodId: route.vodId,
+                        vodName: vod.vodName.isEmpty ? route.name : vod.vodName,
+                        vodPic: vod.vodPic.isEmpty ? route.pic : vod.vodPic,
+                        flag: flag, episode: episode, position: position, duration: duration))
+                }
+            }
+        }
+    }
+
+    private var history: HistoryItem? {
+        state.library.history(config: state.configURL, siteKey: route.siteKey, vodId: route.vodId)
+    }
+
+    private func keepItem(_ vod: Vod) -> KeepItem {
+        KeepItem(config: state.configURL, siteKey: route.siteKey, vodId: route.vodId,
+                 vodName: vod.vodName.isEmpty ? route.name : vod.vodName, vodPic: vod.vodPic.isEmpty ? route.pic : vod.vodPic)
+    }
+
+    /// 从上次观看的线路与集数继续
+    private func resume(_ flags: [Flag]) {
+        guard let h = history,
+              let f = flags.firstIndex(where: { $0.flag == h.flag }) ?? flags.indices.first,
+              let e = flags[f].episodes.firstIndex(where: { $0.name == h.episode }) else { return }
+        playing = PlayTarget(flags: flags, flag: f, episode: e, resume: h.position)
     }
 
     private func content(_ vod: Vod) -> some View {
@@ -56,6 +88,10 @@ struct DetailView: View {
             if flags.isEmpty {
                 Text("没有播放线路").foregroundStyle(.secondary)
             } else {
+                if let h = history {
+                    Button("继续观看 \(h.episode)", systemImage: "play.fill") { resume(flags) }
+                        .buttonStyle(.borderedProminent)
+                }
                 Picker("线路", selection: $flagIndex) {
                     ForEach(flags.indices, id: \.self) { Text(flags[$0].flag).tag($0) }
                 }
@@ -96,6 +132,7 @@ struct DetailView: View {
             let r = try await state.api(site).detail(ids: [route.vodId])
             guard let v = r.list.first else { throw PlayError.emptyURL }
             vod = v
+            if let h = history, let f = v.flags.firstIndex(where: { $0.flag == h.flag }) { flagIndex = f }
         } catch {
             self.error = error.localizedDescription
         }
@@ -107,6 +144,7 @@ struct PlayTarget: Identifiable {
     let flags: [Flag]
     let flag: Int
     let episode: Int
+    var resume: Double = 0
 }
 
 extension Array {

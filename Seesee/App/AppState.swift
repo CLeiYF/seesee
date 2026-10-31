@@ -1,6 +1,5 @@
 import Foundation
 import Observation
-import SwiftData
 
 @MainActor
 @Observable
@@ -13,9 +12,11 @@ final class AppState {
     var error: String?
     var notice: String?
 
+    let library: Library
     @ObservationIgnored let fetch: HTTP.Fetch
 
-    init(fetch: @escaping HTTP.Fetch = HTTP.live) {
+    init(library: Library? = nil, fetch: @escaping HTTP.Fetch = HTTP.live) {
+        self.library = library ?? Library()
         self.fetch = fetch
     }
 
@@ -23,39 +24,38 @@ final class AppState {
 
     func site(_ key: String) -> Site? { config.sites.first { $0.key == key } }
 
+    /// 参与搜索的站点（配置 searchable 且用户未关闭）
+    var searchSites: [Site] { config.sites.filter { $0.isSupported && library.isSearchable($0) } }
+
     /// 启动时恢复最近一次使用的配置
-    func restore(_ context: ModelContext) async {
+    func restore() async {
+        guard configURL.isEmpty else { return }
         // ponytail: 启动参数 `-config <url>` 直接加载，便于模拟器调试
-        if configURL.isEmpty, let url = UserDefaults.standard.string(forKey: "config") {
-            return await load(url, context: context)
-        }
-        var d = FetchDescriptor<ConfigRecord>(sortBy: [SortDescriptor(\.time, order: .reverse)])
-        d.fetchLimit = 1
-        guard configURL.isEmpty, let last = try? context.fetch(d).first else { return }
-        await load(last.url, context: context)
+        if let url = UserDefaults.standard.string(forKey: "config") { return await load(url) }
+        if let last = library.data.configs.first { await load(last.url) }
     }
 
-    func load(_ url: String, raw: String? = nil, context: ModelContext) async {
+    func load(_ url: String, raw: String? = nil) async {
         let url = url.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !url.isEmpty else { return }
         loading = true
         error = nil
         defer { loading = false }
-        let record = record(url, context)
+        let saved = library.config(url)
         do {
             let result = if let raw {
                 try await ConfigLoader.resolve(url, raw: raw, fetch: fetch)
             } else {
                 try await ConfigLoader.load(url, fetch: fetch)
             }
-            apply(result.config, url: url, home: record?.home)
+            library.saveConfig(url: url, text: result.text)
+            apply(result.config, url: url, home: saved?.home)
             depots = result.depots
             notice = result.config.notice.isEmpty ? nil : result.config.notice
-            save(url, text: result.text, context)
         } catch let e {
             // 网络失败时用上次缓存的文本
-            if let record, !record.text.isEmpty, let cached = try? VodConfig.parse(record.text) {
-                apply(cached, url: url, home: record.home)
+            if let saved, !saved.text.isEmpty, let cached = try? VodConfig.parse(saved.text) {
+                apply(cached, url: url, home: saved.home)
                 error = "配置加载失败，已使用缓存：\(e.localizedDescription)"
             } else {
                 error = "配置加载失败：\(e.localizedDescription)"
@@ -63,10 +63,9 @@ final class AppState {
         }
     }
 
-    func setHome(_ site: Site, context: ModelContext) {
+    func setHome(_ site: Site) {
         home = site
-        record(configURL, context)?.home = site.key
-        try? context.save()
+        library.setHome(url: configURL, key: site.key)
     }
 
     private func apply(_ config: VodConfig, url: String, home key: String?) {
@@ -75,19 +74,5 @@ final class AppState {
         HTTP.hostHeaders = config.headers
         let usable = config.homeSites.filter(\.isSupported)
         home = usable.first { $0.key == key } ?? usable.first
-    }
-
-    private func record(_ url: String, _ context: ModelContext) -> ConfigRecord? {
-        try? context.fetch(FetchDescriptor<ConfigRecord>(predicate: #Predicate { $0.url == url })).first
-    }
-
-    private func save(_ url: String, text: String, _ context: ModelContext) {
-        if let r = record(url, context) {
-            r.text = text
-            r.time = .now
-        } else {
-            context.insert(ConfigRecord(url: url, text: text, home: home?.key ?? ""))
-        }
-        try? context.save()
     }
 }

@@ -18,19 +18,35 @@ final class PlayerEngine {
     @ObservationIgnored private var watchdog: Task<Void, Never>?
     @ObservationIgnored private var observer: NSKeyValueObservation?
     @ObservationIgnored private var tried = Set<Int>()
+    @ObservationIgnored private var resume: Double = 0
+    @ObservationIgnored private var ticker: Any?
+    /// (线路, 集名, 进度秒, 时长秒)，约每 5 秒及停止时回调
+    @ObservationIgnored var onProgress: (String, String, Double, Double) -> Void = { _, _, _, _ in }
 
     var title: String {
         guard flags.indices.contains(flagIndex), flags[flagIndex].episodes.indices.contains(episodeIndex) else { return "" }
         return flags[flagIndex].episodes[episodeIndex].name
     }
 
-    func start(api: SiteAPI, site: Site, flags: [Flag], flag: Int, episode: Int, vipFlags: [String]) {
+    func start(api: SiteAPI, site: Site, flags: [Flag], flag: Int, episode: Int, vipFlags: [String], resume: Double = 0) {
         self.api = api
         self.site = site
         self.flags = flags
         self.vipFlags = vipFlags
+        self.resume = resume
         tried = []
+        ticker = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 5, preferredTimescale: 1), queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.report() }
+        }
         play(flag: flag, episode: episode)
+    }
+
+    private func report() {
+        guard let item = player.currentItem, flags.indices.contains(flagIndex) else { return }
+        let position = item.currentTime().seconds
+        let duration = item.duration.seconds
+        guard position.isFinite, position > 0 else { return }
+        onProgress(flags[flagIndex].flag, title, position, duration.isFinite ? duration : 0)
     }
 
     func play(flag: Int, episode: Int) {
@@ -56,6 +72,8 @@ final class PlayerEngine {
 
     func next() {
         guard flags.indices.contains(flagIndex) else { return }
+        report()
+        resume = 0
         play(flag: flagIndex, episode: episodeIndex + 1)
     }
 
@@ -64,8 +82,11 @@ final class PlayerEngine {
     }
 
     func stop() {
+        report()
         watchdog?.cancel()
         observer = nil
+        if let ticker { player.removeTimeObserver(ticker) }
+        ticker = nil
         player.replaceCurrentItem(with: nil)
     }
 
@@ -83,6 +104,12 @@ final class PlayerEngine {
                 case .readyToPlay:
                     self.watchdog?.cancel()
                     self.status = ""
+                    // 续播：只用一次，快到结尾时不跳
+                    let d = item.duration.seconds
+                    if self.resume > 5, !d.isFinite || self.resume < d - 10 {
+                        item.seek(to: CMTime(seconds: self.resume, preferredTimescale: 600), completionHandler: nil)
+                    }
+                    self.resume = 0
                 case .failed:
                     self.fail(item.error?.localizedDescription ?? "播放失败")
                 default: break

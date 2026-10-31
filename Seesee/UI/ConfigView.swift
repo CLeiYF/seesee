@@ -1,12 +1,9 @@
-import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
 struct ConfigView: View {
     @Environment(AppState.self) private var state
-    @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \ConfigRecord.time, order: .reverse) private var history: [ConfigRecord]
     @State private var url = ""
     @State private var importing = false
 
@@ -34,7 +31,7 @@ struct ConfigView: View {
                     Section("首页站点") {
                         ForEach(state.config.homeSites) { site in
                             Button {
-                                state.setHome(site, context: context)
+                                state.setHome(site)
                                 dismiss()
                             } label: {
                                 HStack {
@@ -48,12 +45,12 @@ struct ConfigView: View {
                         }
                     }
                 }
-                if !history.isEmpty {
+                if !state.library.data.configs.isEmpty {
                     Section("历史") {
-                        ForEach(history) { r in
-                            Button(r.url) { load(r.url) }.lineLimit(1)
+                        ForEach(state.library.data.configs) { c in
+                            Button(c.url) { load(c.url) }.lineLimit(1)
                         }
-                        .onDelete { $0.map { history[$0] }.forEach(context.delete) }
+                        .onDelete { $0.map { state.library.data.configs[$0].url }.forEach(state.library.removeConfig) }
                     }
                 }
             }
@@ -66,7 +63,7 @@ struct ConfigView: View {
                 let ok = file.startAccessingSecurityScopedResource()
                 defer { if ok { file.stopAccessingSecurityScopedResource() } }
                 guard let raw = try? String(contentsOf: file, encoding: .utf8) else { return }
-                Task { await state.load(file.absoluteString, raw: raw, context: context) }
+                Task { await state.load(file.absoluteString, raw: raw) }
             }
         }
     }
@@ -74,7 +71,7 @@ struct ConfigView: View {
     private func load(_ u: String) {
         url = u
         Task {
-            await state.load(u, context: context)
+            await state.load(u)
             if state.error == nil { dismiss() }
         }
     }

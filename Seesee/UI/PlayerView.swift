@@ -8,6 +8,9 @@ struct PlayerView: View {
     let flag: Int
     let episode: Int
     let vipFlags: [String]
+    var resume: Double = 0
+    /// (线路, 集名, 进度秒, 时长秒)
+    var onProgress: (String, String, Double, Double) -> Void = { _, _, _, _ in }
     @Environment(\.dismiss) private var dismiss
     @State private var engine = PlayerEngine()
 
@@ -38,7 +41,8 @@ struct PlayerView: View {
         }
         .onAppear {
             try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
-            engine.start(api: api, site: site, flags: flags, flag: flag, episode: episode, vipFlags: vipFlags)
+            engine.onProgress = onProgress
+            engine.start(api: api, site: site, flags: flags, flag: flag, episode: episode, vipFlags: vipFlags, resume: resume)
         }
         .onDisappear { engine.stop() }
     }

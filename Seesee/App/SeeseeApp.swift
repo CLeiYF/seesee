@@ -1,4 +1,3 @@
-import SwiftData
 import SwiftUI
 
 @main
@@ -10,6 +9,5 @@ struct SeeseeApp: App {
             RootView()
                 .environment(state)
         }
-        .modelContainer(for: ConfigRecord.self)
     }
 }
