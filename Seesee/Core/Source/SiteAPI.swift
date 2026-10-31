@@ -22,6 +22,7 @@ func makeAPI(_ site: Site, fetch: @escaping HTTP.Fetch = HTTP.live) -> SiteAPI {
     switch site.type {
     case 0, 1, 2: CMSSource(site: site, fetch: fetch)
     case 4: CustomSource(site: site, fetch: fetch)
+    case 3 where site.api.contains(".js"): JSSpider.shared(site)
     default: Unsupported(api: site.api)
     }
 }

@@ -69,6 +69,7 @@ final class AppState {
     }
 
     private func apply(_ config: VodConfig, url: String, home key: String?) {
+        if configURL != url { JSSpider.reset() }
         self.config = config
         configURL = url
         HTTP.hostHeaders = config.headers

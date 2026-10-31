@@ -11,7 +11,13 @@ targets:
   Seesee:
     type: application
     platform: iOS
-    sources: [Seesee]
+    sources:
+      - path: Seesee
+        excludes: ["Resources/**"]
+      # 保留目录结构，运行时按 js/lib/xxx.js 读取（对应 assets://js/lib/xxx.js）
+      - path: Seesee/Resources/js
+        type: folder
+        buildPhase: resources
     info:
       path: Seesee/Info.plist
       properties:

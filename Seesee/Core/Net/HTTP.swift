@@ -34,7 +34,8 @@ enum HTTP {
         return req
     }
 
-    private static func request(_ url: URL, headers: [String: String], timeout: TimeInterval) -> URLRequest {
+    /// 默认 UA + 配置 headers + 调用方 headers（后者优先）
+    static func request(_ url: URL, headers: [String: String], timeout: TimeInterval) -> URLRequest {
         var req = URLRequest(url: url, timeoutInterval: timeout)
         req.setValue(chrome, forHTTPHeaderField: "User-Agent")
         let host = url.host?.lowercased() ?? ""
