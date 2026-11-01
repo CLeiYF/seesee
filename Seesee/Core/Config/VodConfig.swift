@@ -30,7 +30,7 @@ struct Depot: Decodable, Hashable {
     }
 }
 
-/// 点播配置（对应 VodConfig.java）；lives 留给 M5
+/// 点播 + 直播配置（对应 VodConfig.java / LiveConfig.java 同地址的情况）
 struct VodConfig: Decodable {
     var spider = ""
     var wallpaper = ""
@@ -41,6 +41,7 @@ struct VodConfig: Decodable {
     var flags: [String] = []
     var headers: [HostHeader] = []
     var urls: [Depot] = []
+    var lives: [Live] = []
     var msg = ""
 
     init() {}
@@ -61,6 +62,7 @@ struct VodConfig: Decodable {
         flags = c.list(AnyKey("flags"))
         headers = c.list(AnyKey("headers"))
         urls = c.list(AnyKey("urls"))
+        lives = c.list(AnyKey("lives"))
         msg = c.str(AnyKey("msg"))
         var seen = Set<String>()
         sites = sites.filter { !$0.key.isEmpty && seen.insert($0.key).inserted }

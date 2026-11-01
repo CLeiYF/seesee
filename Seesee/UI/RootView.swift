@@ -7,11 +7,15 @@ struct RootView: View {
     struct DebugPlay: Identifiable { let id = UUID(); let route: VodRoute; let flag: Int }
     #endif
 
+    /// 调试：`-tab <序号>` 选择初始 tab
+    @State private var tab = UserDefaults.standard.integer(forKey: "tab")
+
     var body: some View {
-        TabView {
-            stack { HomeTab() }.tabItem { Label("首页", systemImage: "house") }
-            stack { SearchView() }.tabItem { Label("搜索", systemImage: "magnifyingglass") }
-            stack { MineView() }.tabItem { Label("我的", systemImage: "person") }
+        TabView(selection: $tab) {
+            stack { HomeTab() }.tabItem { Label("首页", systemImage: "house") }.tag(0)
+            stack { LiveView() }.tabItem { Label("直播", systemImage: "antenna.radiowaves.left.and.right") }.tag(1)
+            stack { SearchView() }.tabItem { Label("搜索", systemImage: "magnifyingglass") }.tag(2)
+            stack { MineView() }.tabItem { Label("我的", systemImage: "person") }.tag(3)
         }
         .task { await state.restore() }
         #if DEBUG
