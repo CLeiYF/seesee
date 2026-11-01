@@ -14,6 +14,7 @@ struct VodResult: Decodable {
     var pagecount: Int?
     var msg = ""
     var code: Int?
+    var subs: [Sub] = []
 
     init() {}
 
@@ -31,6 +32,7 @@ struct VodResult: Decodable {
         pagecount = c.int(AnyKey("pagecount"))
         msg = c.str(AnyKey("msg"))
         code = c.int(AnyKey("code"))
+        subs = c.list(AnyKey("subs"))
     }
 
     static func json(_ text: String) -> VodResult {
@@ -59,6 +61,18 @@ struct VodResult: Decodable {
         let s = c.str(AnyKey("header"))
         guard let data = s.data(using: .utf8), let obj = try? JSONDecoder().decode(AnyJSON.self, from: data) else { return [:] }
         return obj.dict
+    }
+}
+
+/// 结果里的 subs（对应 bean/Sub）
+struct Sub: Decodable, Hashable {
+    var url = ""
+    var name = ""
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: AnyKey.self)
+        url = c.str(AnyKey("url"))
+        name = c.str(AnyKey("name"))
     }
 }
 

@@ -2,6 +2,10 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppState.self) private var state
+    #if DEBUG
+    @State private var debugPlay: DebugPlay?
+    struct DebugPlay: Identifiable { let id = UUID(); let route: VodRoute; let flag: Int }
+    #endif
 
     var body: some View {
         TabView {
@@ -10,6 +14,16 @@ struct RootView: View {
             stack { MineView() }.tabItem { Label("我的", systemImage: "person") }
         }
         .task { await state.restore() }
+        #if DEBUG
+        // ponytail: 调试用 `-play <siteKey>/<vodId>/<flag序号>` 直接打开播放器（simctl 无法点击）
+        .fullScreenCover(item: $debugPlay) { r in DetailView(route: r.route, autoplay: r.flag) }
+        .onChange(of: state.home?.key) {
+            if debugPlay == nil, let arg = UserDefaults.standard.string(forKey: "play") {
+                let p = arg.split(separator: "/").map(String.init)
+                if p.count == 3 { debugPlay = DebugPlay(route: VodRoute(siteKey: p[0], vodId: p[1], name: "", pic: ""), flag: Int(p[2]) ?? 0) }
+            }
+        }
+        #endif
         .alert(state.notice ?? "", isPresented: Binding(get: { state.notice != nil }, set: { if !$0 { state.notice = nil } })) {}
     }
 

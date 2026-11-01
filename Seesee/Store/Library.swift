@@ -19,8 +19,31 @@ struct HistoryItem: Codable, Hashable, Identifiable {
     var episode = ""
     var position: Double = 0
     var duration: Double = 0
+    var skip = PlaybackSkip()
     var time = Date()
     var id: String { Library.key(config, siteKey, vodId) }
+
+    init(config: String, siteKey: String, vodId: String, vodName: String = "", vodPic: String = "", flag: String = "",
+         episode: String = "", position: Double = 0, duration: Double = 0, skip: PlaybackSkip = PlaybackSkip(), time: Date = Date()) {
+        (self.config, self.siteKey, self.vodId, self.vodName, self.vodPic) = (config, siteKey, vodId, vodName, vodPic)
+        (self.flag, self.episode, self.position, self.duration, self.skip, self.time) = (flag, episode, position, duration, skip, time)
+    }
+
+    /// 旧数据没有 skip 字段
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        config = try c.decode(String.self, forKey: .config)
+        siteKey = try c.decode(String.self, forKey: .siteKey)
+        vodId = try c.decode(String.self, forKey: .vodId)
+        vodName = try c.decodeIfPresent(String.self, forKey: .vodName) ?? ""
+        vodPic = try c.decodeIfPresent(String.self, forKey: .vodPic) ?? ""
+        flag = try c.decodeIfPresent(String.self, forKey: .flag) ?? ""
+        episode = try c.decodeIfPresent(String.self, forKey: .episode) ?? ""
+        position = try c.decodeIfPresent(Double.self, forKey: .position) ?? 0
+        duration = try c.decodeIfPresent(Double.self, forKey: .duration) ?? 0
+        skip = try c.decodeIfPresent(PlaybackSkip.self, forKey: .skip) ?? PlaybackSkip()
+        time = try c.decodeIfPresent(Date.self, forKey: .time) ?? Date()
+    }
 }
 
 struct KeepItem: Codable, Hashable, Identifiable {

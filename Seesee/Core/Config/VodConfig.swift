@@ -57,6 +57,7 @@ struct VodConfig: Decodable {
             sites += video.list(AnyKey("sites"))
         }
         parses = c.list(AnyKey("parses"))
+        if !parses.isEmpty { parses.insert(.god, at: 0) }
         flags = c.list(AnyKey("flags"))
         headers = c.list(AnyKey("headers"))
         urls = c.list(AnyKey("urls"))

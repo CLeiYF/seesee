@@ -2,6 +2,8 @@ import SwiftUI
 
 struct DetailView: View {
     let route: VodRoute
+    /// 调试：加载后直接播放该线路第一集
+    var autoplay: Int?
     @Environment(AppState.self) private var state
     @State private var vod: Vod?
     @State private var error: String?
@@ -35,15 +37,24 @@ struct DetailView: View {
         .fullScreenCover(item: $playing) { t in
             if let site, let vod {
                 PlayerView(api: state.api(site), site: site, flags: t.flags, flag: t.flag, episode: t.episode,
-                           vipFlags: state.config.flags, resume: t.resume) { flag, episode, position, duration in
-                    state.library.record(HistoryItem(
-                        config: state.configURL, siteKey: route.siteKey, vodId: route.vodId,
-                        vodName: vod.vodName.isEmpty ? route.name : vod.vodName,
-                        vodPic: vod.vodPic.isEmpty ? route.pic : vod.vodPic,
-                        flag: flag, episode: episode, position: position, duration: duration))
-                }
+                           vipFlags: state.config.flags, parses: state.config.parses, resume: t.resume,
+                           skip: history?.skip ?? PlaybackSkip(),
+                           onProgress: { flag, episode, position, duration in
+                               record(vod) { $0.flag = flag; $0.episode = episode; $0.position = position; $0.duration = duration }
+                           },
+                           onSkip: { skip in record(vod) { $0.skip = skip } })
             }
         }
+    }
+
+    /// 更新观看记录（保留已有字段，如片头片尾）
+    private func record(_ vod: Vod, _ change: (inout HistoryItem) -> Void) {
+        var h = history ?? HistoryItem(config: state.configURL, siteKey: route.siteKey, vodId: route.vodId)
+        h.vodName = vod.vodName.isEmpty ? route.name : vod.vodName
+        h.vodPic = vod.vodPic.isEmpty ? route.pic : vod.vodPic
+        h.time = Date()
+        change(&h)
+        state.library.record(h)
     }
 
     private var history: HistoryItem? {
@@ -133,6 +144,7 @@ struct DetailView: View {
             guard let v = r.list.first else { throw PlayError.emptyURL }
             vod = v
             if let h = history, let f = v.flags.firstIndex(where: { $0.flag == h.flag }) { flagIndex = f }
+            if let f = autoplay, v.flags.indices.contains(f) { playing = PlayTarget(flags: v.flags, flag: f, episode: 0) }
         } catch {
             self.error = error.localizedDescription
         }
