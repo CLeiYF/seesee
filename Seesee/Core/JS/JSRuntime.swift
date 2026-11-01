@@ -23,8 +23,11 @@ final class JSRuntime: @unchecked Sendable {
     private var lastError: String?
     /// 模块源码加载：url → 源码（测试可注入）
     var source: (String) throws -> String
+    /// 所属站点，用于 getProxy 拼出能找回本爬虫的地址
+    let siteKey: String
 
-    init(session: URLSession = .shared, source: ((String) throws -> String)? = nil) {
+    init(siteKey: String = "", session: URLSession = .shared, source: ((String) throws -> String)? = nil) {
+        self.siteKey = siteKey
         self.session = session
         self.source = source ?? JSRuntime.defaultSource(session)
         var loop: RunLoop?

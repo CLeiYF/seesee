@@ -16,13 +16,19 @@ actor JSSpider: SiteAPI {
         lock.withLock {
             let key = site.key + "\u{1}" + site.api + "\u{1}" + site.ext
             if let s = cache[key] { return s }
-            let s = JSSpider(site: site)
+            let s = JSSpider(site: site, runtime: JSRuntime(siteKey: site.key))
             cache[key] = s
             return s
         }
     }
 
     static func reset() { lock.withLock { cache = [:] } }
+
+    /// 测试用：把外部创建的爬虫登记进缓存
+    static func register(_ s: JSSpider) { lock.withLock { cache[s.site.key + "\u{1}" + s.site.api + "\u{1}" + s.site.ext] = s } }
+
+    /// /proxy?do=js&siteKey=… 找到已加载的爬虫
+    static func find(_ siteKey: String) -> JSSpider? { lock.withLock { cache.values.first { $0.site.key == siteKey } } }
 
     init(site: Site, runtime: JSRuntime = JSRuntime()) {
         self.site = site
@@ -56,6 +62,33 @@ actor JSSpider: SiteAPI {
         if r.flag.isEmpty { r.flag = flag }
         if r.header.isEmpty { r.header = site.header }
         return r
+    }
+
+    /// 本地代理（对应 Spider.proxyLocal）。返回 (状态码, Content-Type, 内容, 额外响应头)
+    /// - 普通：proxy(params) 返回 [code, mime, content, headers?, base64?]
+    /// - from=catvod：proxy(url 按 / 拆分的数组, header 对象) 返回 {code, content, buffer, headers}
+    func proxy(_ params: [String: String]) async throws -> (Int, String, Data, [String: String]) {
+        let obj = try await load()
+        if params["from"] == "catvod" {
+            let parts = (params["url"] ?? "").components(separatedBy: "/")
+            let header = (params["header"]?.data(using: .utf8)).flatMap { try? JSONSerialization.jsonObject(with: $0) } ?? [String: Any]()
+            let text = try await runtime.call(obj, "proxy", [parts, header]) ?? "{}"
+            let o = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] ?? [:]
+            let headers = (o["headers"] as? [String: Any])?.mapValues { "\($0)" } ?? [:]
+            let content = o["content"] as? String ?? ""
+            let data = (o["buffer"] as? Int) == 2 ? (JSCrypto.base64(content) ?? Data()) : Data(content.utf8)
+            let type = headers.first { $0.key.lowercased() == "content-type" }?.value ?? "application/octet-stream"
+            return ((o["code"] as? Int) ?? 200, type, data, headers)
+        }
+        let text = try await runtime.call(obj, "proxy", [params]) ?? "[]"
+        let a = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [Any] ?? []
+        let code = a.first.map { AnyJSON(raw: $0).int ?? 500 } ?? 500
+        let mime = a.count > 1 ? AnyJSON(raw: a[1]).string : "text/plain"
+        var content = a.count > 2 ? AnyJSON(raw: a[2]).string : ""
+        let headers = a.count > 3 ? ((a[3] as? [String: Any])?.mapValues { "\($0)" } ?? (AnyJSON(raw: a[3]).string.data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: String] } ?? [:])) : [:]
+        let base64 = a.count > 4 && AnyJSON(raw: a[4]).int == 1
+        if base64, let r = content.range(of: "base64,") { content = String(content[r.upperBound...]) }
+        return (code, mime, base64 ? (JSCrypto.base64(content) ?? Data()) : Data(content.utf8), headers)
     }
 
     // MARK: -

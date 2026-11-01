@@ -47,9 +47,15 @@ extension JSRuntime {
         let rsaX: @convention(block) (String, Bool, Bool, String, Bool, String, Bool) -> String = { _, pub, enc, input, inB64, key, outB64 in
             JSCrypto.rsa(pub: pub, encrypt: enc, input: input, inBase64: inB64, key: key, outBase64: outB64)
         }
-        // M1 没有本地代理服务；返回空让脚本走直连分支
-        let getProxy: @convention(block) (Bool) -> String = { _ in "" }
-        let getPort: @convention(block) () -> Int = { 0 }
+        // 本地代理（对应 Global.getProxy / js2Proxy）；siteKey 让 /proxy 找回对应爬虫
+        let key = siteKey
+        let getProxy: @convention(block) (Bool) -> String = { _ in LocalServer.shared.proxyURL + "?do=js&siteKey=" + HTTP.encode(key) }
+        let getPort: @convention(block) () -> Int = { Int(LocalServer.shared.port) }
+        let js2Proxy: @convention(block) (Bool, Int, String, String, JSValue) -> String = { _, type, sk, url, headers in
+            let h = headers.isObject ? (headers.context.objectForKeyedSubscript("JSON").invokeMethod("stringify", withArguments: [headers]).toString() ?? "{}") : "{}"
+            return LocalServer.shared.proxyURL + "?do=js&from=catvod&siteType=\(type)&siteKey=\(HTTP.encode(sk))&header=\(HTTP.encode(h))&url=\(HTTP.encode(url))"
+        }
+        ctx.setObject(js2Proxy, forKeyedSubscript: "js2Proxy" as NSString)
         let setTimeout: @convention(block) (JSValue, JSValue) -> Void = { [weak self] fn, delay in
             let ms = delay.isUndefined ? 0 : delay.toDouble()
             self?.schedule(ms / 1000) { fn.call(withArguments: []) }

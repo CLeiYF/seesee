@@ -133,7 +133,7 @@ final class PlayerEngine {
 
     private func open(_ r: VodResult, flag: String) async throws {
         if !r.msg.isEmpty, r.url.isEmpty { throw ParseJob.Failure.message(r.msg) }
-        var link = r.url.v
+        var link = LocalServer.shared.convert(r.url.v)
         var headers = site.header.merging(r.header) { $1 }
         // parse=1 / jx=1 需要解析（对应 Players.start → startParse）
         if r.parse == 1 || r.jx == 1 {
