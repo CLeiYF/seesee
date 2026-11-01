@@ -18,6 +18,8 @@ struct LiveView: View {
     @State private var playURL: PlayItem?
     @State private var error: String?
     @State private var loading = false
+    /// 已加载过的配置地址
+    @State private var loadedFor: String?
 
     struct PlayItem: Identifiable {
         let id = UUID()
@@ -68,7 +70,13 @@ struct LiveView: View {
             }
             Button("取消", role: .cancel) { passInput = "" }
         }
-        .task(id: state.configURL) { liveIndex = state.config.lives.firstIndex(where: \.boot) ?? 0; await load() }
+        .task(id: state.configURL) {
+            // TabView 切回来会重跑 .task；配置没变就不重新加载
+            guard loadedFor != state.configURL else { return }
+            loadedFor = state.configURL
+            liveIndex = state.config.lives.firstIndex(where: \.boot) ?? 0
+            await load()
+        }
     }
 
     @ViewBuilder private var player: some View {
@@ -194,6 +202,7 @@ private struct LivePlayer: View {
     private let options: KSOptions
     @StateObject private var coordinator = KSVideoPlayer.Coordinator()
     @State private var watchdog: Task<Void, Never>?
+    @State private var started = false
 
     init(item: LiveView.PlayItem, timeout: Int, onFail: @escaping () -> Void) {
         self.item = item
@@ -213,12 +222,19 @@ private struct LivePlayer: View {
                 if s == .error { onFail() }
             }
             .onAppear {
+                // 切回直播 tab：继续播放，不再起超时换线
+                if started { coordinator.playerLayer?.play(); return }
+                started = true
                 watchdog = Task {
                     try? await Task.sleep(for: .seconds(timeout))
                     if !Task.isCancelled { onFail() }
                 }
             }
-            .onDisappear { watchdog?.cancel() }
+            .onDisappear {
+                // 切到其它 tab 时视图仍在，需手动暂停
+                watchdog?.cancel()
+                coordinator.playerLayer?.pause()
+            }
             .accessibilityLabel(item.title)
     }
 }
