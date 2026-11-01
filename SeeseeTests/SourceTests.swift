@@ -102,7 +102,15 @@ final class SourceTests: XCTestCase {
         HTTP.hostHeaders = [HostHeader(host: "cmvideo.cn", header: ["User-Agent": "okhttp/3.12.13"])]
         defer { HTTP.hostHeaders = [] }
         XCTAssertEqual(try HTTP.get("http://gslb.cmvideo.cn/x").value(forHTTPHeaderField: "User-Agent"), "okhttp/3.12.13")
-        XCTAssertEqual(try HTTP.get("http://other.com/x").value(forHTTPHeaderField: "User-Agent"), HTTP.chrome)
+        XCTAssertEqual(try HTTP.get("http://other.com/x").value(forHTTPHeaderField: "User-Agent"), HTTP.okhttp)
+    }
+
+    /// 默认 UA 与安卓 OkHttp 一致（配置服务器按 UA 分流），仅 gitcode.net 用 Chrome；调用方 header 优先
+    func testDefaultUserAgent() throws {
+        XCTAssertTrue(HTTP.okhttp.hasPrefix("okhttp/"))
+        XCTAssertEqual(try HTTP.get("https://itv.mangzhexuexi.com/").value(forHTTPHeaderField: "User-Agent"), HTTP.okhttp)
+        XCTAssertEqual(try HTTP.get("https://gitcode.net/a/b.json").value(forHTTPHeaderField: "User-Agent"), HTTP.chrome)
+        XCTAssertEqual(try HTTP.get("https://a.com", headers: ["User-Agent": "X"]).value(forHTTPHeaderField: "User-Agent"), "X")
     }
 
     func testNetRulesHostsAndProxy() throws {
