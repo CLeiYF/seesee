@@ -10,6 +10,10 @@ struct DetailView: View {
     @State private var flagIndex = 0
     @State private var reversed = false
     @State private var playing: PlayTarget?
+    @State private var expanded = false
+    /// 换源：快搜其它站点的同名结果（对应 VideoActivity 的 quickSearch）
+    @State private var sources: [Vod] = []
+    @State private var searching = false
 
     private var site: Site? { state.site(route.siteKey) }
 
@@ -26,6 +30,9 @@ struct DetailView: View {
         .navigationTitle(route.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if vod != nil || error != nil {
+                Button("刷新", systemImage: "arrow.clockwise") { Task { await reload() } }
+            }
             if let vod {
                 let kept = state.library.isKept(keepItem(vod).id)
                 Button(kept ? "取消收藏" : "收藏", systemImage: kept ? "heart.fill" : "heart") {
@@ -34,6 +41,7 @@ struct DetailView: View {
             }
         }
         .task { await load() }
+        .refreshable { await reload() }
         .fullScreenCover(item: $playing) { t in
             if let site, let vod {
                 PlayerView(api: state.api(site), site: site, flags: t.flags, flag: t.flag, episode: t.episode,
@@ -85,16 +93,19 @@ struct DetailView: View {
                     info("年份", vod.vodYear)
                     info("地区", vod.vodArea)
                     info("类型", vod.typeName)
-                    info("导演", vod.vodDirector)
-                    info("主演", vod.vodActor)
+                    people("导演", vod.vodDirector)
+                    people("主演", vod.vodActor)
                     info("备注", vod.vodRemarks)
                 }
                 .font(.caption)
             }
             if !vod.vodContent.isEmpty {
                 Text(vod.vodContent.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression))
-                    .font(.footnote).foregroundStyle(.secondary).lineLimit(6)
+                    .font(.footnote).foregroundStyle(.secondary).lineLimit(expanded ? nil : 6)
+                    .onTapGesture { withAnimation { expanded.toggle() } }
+                    .accessibilityHint(expanded ? "收起简介" : "展开简介")
             }
+            switchSource(vod)
             let flags = vod.flags
             if flags.isEmpty {
                 Text("没有播放线路").foregroundStyle(.secondary)
@@ -128,6 +139,79 @@ struct DetailView: View {
                 .buttonStyle(.bordered)
             }
         }
+    }
+
+    /// 演员、导演：逐个可点，转全局搜索
+    @ViewBuilder private func people(_ k: String, _ v: String) -> some View {
+        let names = v.split(whereSeparator: { ",，/、 ".contains($0) }).map(String.init).filter { !$0.isEmpty }
+        if !names.isEmpty {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("\(k)：")
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(names.prefix(8), id: \.self) { n in
+                            Button(n) { state.pendingSearch = n; state.tab = 2 }.foregroundStyle(Color.accentColor)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// 换源：按片名在开启快搜的站点里搜，点结果打开该站详情
+    @ViewBuilder private func switchSource(_ vod: Vod) -> some View {
+        let name = vod.vodName.isEmpty ? route.name : vod.vodName
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("换源").font(.subheadline.bold())
+                Spacer()
+                if searching { ProgressView().controlSize(.small) }
+                else { Button(sources.isEmpty ? "查找" : "重新查找") { quickSearch(name) }.font(.caption) }
+            }
+            if !sources.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(sources) { v in
+                            NavigationLink(value: VodRoute(siteKey: v.siteKey, vodId: v.vodId, name: v.vodName, pic: v.vodPic)) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(state.site(v.siteKey)?.name ?? v.siteKey).font(.caption.bold())
+                                    Text(v.vodRemarks.isEmpty ? v.vodName : v.vodRemarks).font(.caption2).foregroundStyle(.secondary)
+                                }
+                                .lineLimit(1).padding(8).background(.quaternary).clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func quickSearch(_ name: String) {
+        sources = []
+        searching = true
+        let sites = state.searchSites.filter { $0.key != route.siteKey }
+        let api: @Sendable (Site) -> SiteAPI = { [fetch = state.fetch] in makeAPI($0, fetch: fetch) }
+        Task {
+            for await hit in SearchRunner.run(name, sites: sites, quick: true, api: api) {
+                // 只要同名结果（对应原项目按名称匹配）
+                sources += hit.result.list.filter { Self.sameTitle($0.vodName, name) }.prefix(3)
+            }
+            searching = false
+        }
+    }
+
+    static func sameTitle(_ a: String, _ b: String) -> Bool {
+        let n = { (s: String) in s.lowercased().filter { !$0.isWhitespace && !$0.isPunctuation } }
+        let x = n(a), y = n(b)
+        return !x.isEmpty && (x == y || x.contains(y) || y.contains(x))
+    }
+
+    private func reload() async {
+        vod = nil
+        error = nil
+        sources = []
+        await load()
     }
 
     @ViewBuilder private func info(_ k: String, _ v: String) -> some View {

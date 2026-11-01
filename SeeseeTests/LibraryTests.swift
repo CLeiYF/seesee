@@ -95,4 +95,12 @@ final class LibraryTests: XCTestCase {
         func detail(ids: [String]) async throws -> VodResult { VodResult() }
         func player(flag: String, id: String, vipFlags: [String]) async throws -> VodResult { VodResult() }
     }
+
+    /// 换源只匹配同名（忽略空格、标点、大小写）
+    func testSameTitleMatching() {
+        XCTAssertTrue(DetailView.sameTitle("流浪地球 2", "流浪地球2"))
+        XCTAssertTrue(DetailView.sameTitle("流浪地球2：再次冒险", "流浪地球2"))
+        XCTAssertFalse(DetailView.sameTitle("流浪星球", "流浪地球"))
+        XCTAssertFalse(DetailView.sameTitle("", "流浪地球"))
+    }
 }
