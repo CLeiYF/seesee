@@ -140,7 +140,7 @@ final class PlayerEngine {
             status = "解析中…"
             let useParse = !parses.isEmpty && ((r.playUrl.isEmpty && vipFlags.contains(r.flag.isEmpty ? flag : r.flag)) || r.jx == 1)
             let p = ParseJob.pick(result: r, useParse: useParse, selected: parse ?? parses.first, parses: parses)
-            let out = try await ParseJob.run(p, url: link, flag: flag, parses: parses, fetch: fetch)
+            let out = try await ParseJob.run(p, url: link, flag: flag, parses: parses, fetch: fetch, sniff: WebSniffer.sniff)
             link = out.url
             headers = out.headers.isEmpty ? headers : out.headers
         }

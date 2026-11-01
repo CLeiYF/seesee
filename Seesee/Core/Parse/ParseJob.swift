@@ -1,8 +1,11 @@
 import Foundation
 
-/// 对应 player/ParseJob.java 的 JSON 部分：type 1（JSON 解析）与 type 4（超级解析，并发跑所有 JSON 解析取最先成功）。
-/// ponytail: type 0 WebView 嗅探、type 2/3（依赖 jar）未实现，遇到直接报错
+/// 对应 player/ParseJob.java：type 0（网页嗅探）、1（JSON 解析）、4（超级解析：JSON 与网页嗅探并发，取最先成功）。
+/// type 2/3 依赖 jar，iOS 不支持。
 enum ParseJob {
+    /// 网页嗅探：(页面地址, 请求头, click 脚本) → 嗅探到的视频地址。由 UI 层用 WKWebView 实现并注入，Core 不依赖 WebKit
+    typealias Sniff = @Sendable (_ url: String, _ headers: [String: String], _ click: String) async throws -> Output
+
     struct Output: Equatable {
         var url: String
         var headers: [String: String]
@@ -33,12 +36,18 @@ enum ParseJob {
         return parse
     }
 
-    static func run(_ parse: Parse, url: String, flag: String, parses: [Parse], fetch: @escaping HTTP.Fetch) async throws -> Output {
+    static func run(_ parse: Parse, url: String, flag: String, parses: [Parse], click: String = "",
+                    fetch: @escaping HTTP.Fetch, sniff: Sniff?) async throws -> Output {
         switch parse.type {
+        case 0:
+            guard let sniff else { throw Failure.unsupported(0) }
+            var out = try await sniff(parse.url + url, parse.header, click)
+            out.from = parse.name
+            return out
         case 1:
             return try await json(parse, url: url, fetch: fetch)
         case 4:
-            return try await god(url: url, flag: flag, parses: parses, fetch: fetch)
+            return try await god(url: url, flag: flag, parses: parses, fetch: fetch, sniff: sniff)
         default:
             throw Failure.unsupported(parse.type)
         }
@@ -54,19 +63,35 @@ enum ParseJob {
         return Output(url: u, headers: headers(obj, fallback: parse.header), from: parse.name)
     }
 
-    /// 并发跑匹配 flag 的所有 JSON 解析（没有匹配就全部），第一个成功即返回
-    static func god(url: String, flag: String, parses: [Parse], fetch: @escaping HTTP.Fetch) async throws -> Output {
-        let json = parses.filter { $0.type == 1 }
-        let matched = json.filter { $0.flag.contains(flag) }
-        let items = matched.isEmpty ? json : matched
-        guard !items.isEmpty else { throw Failure.failed }
+    /// 按 flag 过滤某类解析，没有匹配就用该类全部（对应 VodConfig.getParses(type, flag)）
+    static func parses(_ all: [Parse], type: Int, flag: String) -> [Parse] {
+        let items = all.filter { $0.type == type }
+        let matched = items.filter { $0.flag.contains(flag) }
+        return matched.isEmpty ? items : matched
+    }
+
+    /// 并发跑匹配 flag 的所有 JSON 解析与网页解析，第一个成功即返回
+    static func god(url: String, flag: String, parses all: [Parse], fetch: @escaping HTTP.Fetch, sniff: Sniff? = nil) async throws -> Output {
+        let json = parses(all, type: 1, flag: flag)
+        let webs = sniff == nil ? [] : parses(all, type: 0, flag: flag)
+        let count = json.count + webs.count
+        guard count > 0 else { throw Failure.failed }
         return try await withThrowingTaskGroup(of: Output?.self) { group in
-            for p in items { group.addTask { try? await Self.json(p, url: url, fetch: fetch) } }
+            for p in json { group.addTask { try? await Self.json(p, url: url, fetch: fetch) } }
+            if let sniff {
+                for p in webs {
+                    group.addTask {
+                        guard var out = try? await sniff(p.url + url, p.header, "") else { return nil }
+                        out.from = p.name
+                        return out
+                    }
+                }
+            }
             group.addTask {
                 try await Task.sleep(for: .seconds(timeout))
                 throw Failure.failed
             }
-            var pending = items.count
+            var pending = count
             defer { group.cancelAll() }
             for try await out in group {
                 if let out { return out }

@@ -68,4 +68,44 @@ final class ParseTests: XCTestCase {
         XCTAssertFalse(PlaybackSkip(opening: 0, ending: 120).shouldEnd(position: 2800, duration: 3000))
         XCTAssertFalse(PlaybackSkip(opening: 0, ending: 0).shouldEnd(position: 2999, duration: 3000))
     }
+
+    func testSnifferRulesAndAds() {
+        Sniffer.rules = [SniffRule(hosts: ["api.52wyb.com"], regex: ["m3u8?pt=m3u8"], exclude: ["test.json"])]
+        Sniffer.ads = ["ads.example.com"]
+        defer { Sniffer.rules = []; Sniffer.ads = [] }
+        XCTAssertTrue(Sniffer.isVideoFormat("https://api.52wyb.com/x?m3u8?pt=m3u8"))
+        XCTAssertFalse(Sniffer.isVideoFormat("https://api.52wyb.com/test.json/a.m3u8"))
+        // 按 url= 参数里的 host 也能命中规则
+        XCTAssertEqual(Sniffer.rule(for: "https://jx.example.com/?url=https://api.52wyb.com/p").regex, ["m3u8?pt=m3u8"])
+        XCTAssertTrue(Sniffer.isAd("ads.example.com"))
+        XCTAssertFalse(Sniffer.isAd("cdn.example.com"))
+    }
+
+    func testType0UsesInjectedSniffer() throws {
+        let sniff: ParseJob.Sniff = { url, _, click in
+            ParseJob.Output(url: "\(url)#\(click)", headers: [:], from: "")
+        }
+        let out = try blocking {
+            try await ParseJob.run(Parse(type: 0, url: "http://jx/?u=", name: "网页"), url: "http://v/1.html", flag: "f",
+                                   parses: [], click: "go()", fetch: MockFetch().fetch, sniff: sniff)
+        }
+        XCTAssertEqual(out.url, "http://jx/?u=http://v/1.html#go()")
+        XCTAssertEqual(out.from, "网页")
+        XCTAssertThrowsError(try blocking {
+            try await ParseJob.run(Parse(type: 0, url: "x"), url: "y", flag: "", parses: [], fetch: MockFetch().fetch, sniff: nil)
+        })
+    }
+
+    func testGodRacesWebSniffWhenJSONFails() throws {
+        let m = MockFetch()
+        m.on("bad", "{}")
+        let sniff: ParseJob.Sniff = { url, _, _ in
+            try await Task.sleep(for: .milliseconds(50))
+            return ParseJob.Output(url: url + ".m3u8", headers: [:], from: "")
+        }
+        let parses = [.god, Parse(type: 1, url: "http://bad/?u=", name: "json"), Parse(type: 0, url: "http://web/?u=", name: "web")]
+        let out = try blocking { try await ParseJob.god(url: "x", flag: "f", parses: parses, fetch: m.fetch, sniff: sniff) }
+        XCTAssertEqual(out.from, "web")
+        XCTAssertEqual(out.url, "http://web/?u=x.m3u8")
+    }
 }

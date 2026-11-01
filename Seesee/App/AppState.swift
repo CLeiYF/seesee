@@ -73,6 +73,8 @@ final class AppState {
         self.config = config
         configURL = url
         HTTP.hostHeaders = config.headers
+        Sniffer.rules = config.rules
+        Sniffer.ads = config.ads
         let usable = config.homeSites.filter(\.isSupported)
         home = usable.first { $0.key == key } ?? usable.first
     }

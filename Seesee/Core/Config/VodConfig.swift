@@ -42,6 +42,8 @@ struct VodConfig: Decodable {
     var headers: [HostHeader] = []
     var urls: [Depot] = []
     var lives: [Live] = []
+    var rules: [SniffRule] = []
+    var ads: [String] = []
     var msg = ""
 
     init() {}
@@ -63,6 +65,8 @@ struct VodConfig: Decodable {
         headers = c.list(AnyKey("headers"))
         urls = c.list(AnyKey("urls"))
         lives = c.list(AnyKey("lives"))
+        rules = c.list(AnyKey("rules"))
+        ads = c.list(AnyKey("ads"))
         msg = c.str(AnyKey("msg"))
         var seen = Set<String>()
         sites = sites.filter { !$0.key.isEmpty && seen.insert($0.key).inserted }
