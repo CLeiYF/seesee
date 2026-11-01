@@ -181,4 +181,45 @@ final class JSTests: XCTestCase {
     -----END PRIVATE KEY-----
     """
     static let sig = "Po6b8TbjXWuawJPC/HoOlnR2gxJmrXTX75kkABgIfHZD84a5cD5zV9wBnyreWx7tkSp0mXbxF2QsszD+4yanLp704tp/qKqbWWEKKLwUkPu45TbrATzxEk2H/+ifArZYRmf3CoZBEgcgU/KBFUY5CtgvsFti1gkwFwL2JPpaOYY="
+
+    func testBundledJarSpiderMapping() {
+        XCTAssertEqual(Site.bundledSpider("csp_DoubanLocal"), "assets://js/spider/Douban.js")
+        XCTAssertEqual(Site.bundledSpider("csp_Douban"), "assets://js/spider/Douban.js")
+        XCTAssertNil(Site.bundledSpider("csp_Wogg"))
+        XCTAssertTrue(Site(key: "d", api: "csp_DoubanLocal", type: 3).isSupported)
+        XCTAssertFalse(Site(key: "w", api: "csp_Wogg", type: 3).isSupported)
+    }
+
+    /// 内置 Douban.js：请求 frodo 接口、msearch id、带 Referer 的图片、筛选拼 tags
+    func testBundledDoubanSpider() async throws {
+        let rt = runtime([:])
+        var urls: [String] = []
+        try rt.perform {
+            let fake: @convention(block) (String, JSValue) -> JSValue? = { url, _ in
+                urls.append(url)
+                let body = #"{"subject_collection_items":[{"id":"1","title":"A","pic":{"normal":"http://img/a.jpg"},"rating":{"value":8.1}}],"items":[{"id":"2","title":"B"}]}"#
+                return JSValue(object: ["code": 200, "content": body], in: rt.context)
+            }
+            rt.context.setObject(fake, forKeyedSubscript: "_http" as NSString)
+        }
+        let spider = JSSpider(site: Site(key: "db", api: "assets://js/spider/Douban.js", type: 3), runtime: rt)
+        let home = try await spider.home()
+        XCTAssertEqual(home.classes.count, 7)
+        XCTAssertEqual(home.list.first?.vodId, "msearch:1")
+        XCTAssertEqual(home.list.first?.vodRemarks, "评分：8.1")
+        XCTAssertTrue(home.list.first?.vodPic.hasPrefix("http://img/a.jpg@Referer=") == true)
+        let c = try await spider.category(tid: "movie", page: 2, filter: true, extend: ["类型": "喜剧", "sort": "S"])
+        XCTAssertEqual(c.list.first?.vodName, "B")
+        let last = try XCTUnwrap(urls.last)
+        XCTAssertTrue(last.contains("/movie/recommend?apikey="), last)
+        XCTAssertTrue(last.contains("sort=S") && last.contains("start=20") && last.contains("tags=%E5%96%9C%E5%89%A7"), last)
+    }
+
+    func testPosterHeaderSuffix() throws {
+        let r = try XCTUnwrap(Poster.request("https://img/p.jpg@Referer=https://api.douban.com/@User-Agent=UA/1"))
+        XCTAssertEqual(r.url?.absoluteString, "https://img/p.jpg")
+        XCTAssertEqual(r.value(forHTTPHeaderField: "Referer"), "https://api.douban.com/")
+        XCTAssertEqual(r.value(forHTTPHeaderField: "User-Agent"), "UA/1")
+        XCTAssertEqual(Poster.request("https://img/x@2x.png")?.url?.absoluteString, "https://img/x@2x.png")
+    }
 }

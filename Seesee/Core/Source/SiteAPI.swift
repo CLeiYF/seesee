@@ -23,8 +23,17 @@ func makeAPI(_ site: Site, fetch: @escaping HTTP.Fetch = HTTP.live) -> SiteAPI {
     case 0, 1, 2: CMSSource(site: site, fetch: fetch)
     case 4: CustomSource(site: site, fetch: fetch)
     case 3 where site.api.contains(".js"): JSSpider.shared(site)
+    case 3: bundled(site)
     default: Unsupported(api: site.api)
     }
+}
+
+/// csp_Xxx 有内置 JS 版时改写 api 后按 JS 爬虫运行
+private func bundled(_ site: Site) -> SiteAPI {
+    guard let js = Site.bundledSpider(site.api) else { return Unsupported(api: site.api) }
+    var s = site
+    s.api = js
+    return JSSpider.shared(s)
 }
 
 struct Unsupported: SiteAPI {

@@ -11,6 +11,10 @@ final class AppState {
     var loading = false
     var error: String?
     var notice: String?
+    /// 当前 tab；`msearch:` 影片点击后切到搜索
+    var tab = UserDefaults.standard.integer(forKey: "tab")
+    /// 待执行的搜索词（由 msearch 等跳转写入，SearchView 消费后清空）
+    var pendingSearch: String?
 
     let library: Library
     @ObservationIgnored let fetch: HTTP.Fetch

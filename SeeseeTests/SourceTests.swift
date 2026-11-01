@@ -94,6 +94,8 @@ final class SourceTests: XCTestCase {
         XCTAssertEqual(r.url, "http://h/one/c.json")
         XCTAssertEqual(r.depots.count, 1)
         XCTAssertEqual(r.config.sites.first?.api, "http://h/one/api")
+        // 配置请求用 OkHttp UA（有的服务器对浏览器 UA 302 到网页）
+        XCTAssertEqual(m.last?.value(forHTTPHeaderField: "User-Agent"), "okhttp/3.15")
     }
 
     func testHostHeaders() throws {

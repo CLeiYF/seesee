@@ -38,22 +38,43 @@ struct VodCard: View {
 
 struct Poster: View {
     let url: String
+    @State private var image: UIImage?
 
     var body: some View {
-        AsyncImage(url: URL(string: url)) { phase in
-            if let image = phase.image {
-                image.resizable().scaledToFill()
+        Group {
+            if let image {
+                Image(uiImage: image).resizable().scaledToFill()
             } else {
                 Rectangle().fill(.quaternary).overlay { Image(systemName: "film").foregroundStyle(.secondary) }
             }
         }
         .clipped()
         .accessibilityHidden(true)
+        .task(id: url) {
+            image = nil
+            // ponytail: 依赖 URLCache 默认缓存，图多了卡再加内存缓存
+            guard let req = Poster.request(url), let (data, _) = try? await URLSession.shared.data(for: req) else { return }
+            image = UIImage(data: data)
+        }
+    }
+
+    /// CatVod 图片写法 `url@Referer=xxx@User-Agent=yyy`：@ 之后是请求头
+    static func request(_ raw: String) -> URLRequest? {
+        // 只在 `@Name=` 处切分，避免误伤 `x@2x.png` 这类地址
+        let parts = raw.split(separator: #/@(?=[A-Za-z][A-Za-z-]*=)/#).map(String.init)
+        guard let first = parts.first, let u = URL(string: first), u.scheme != nil else { return nil }
+        var req = URLRequest(url: u)
+        for p in parts.dropFirst() {
+            let kv = p.split(separator: "=", maxSplits: 1).map(String.init)
+            if kv.count == 2 { req.setValue(kv[1], forHTTPHeaderField: kv[0]) }
+        }
+        return req
     }
 }
 
 /// 影片网格/列表，滚到底触发 onEnd 加载下一页
 struct VodGrid: View {
+    @Environment(AppState.self) private var state
     let items: [Vod]
     let style: Style
     let siteKey: String
@@ -67,8 +88,15 @@ struct VodGrid: View {
     var body: some View {
         LazyVGrid(columns: columns, spacing: 12) {
             ForEach(items) { vod in
-                NavigationLink(value: VodRoute(siteKey: vod.siteKey.isEmpty ? siteKey : vod.siteKey, vodId: vod.vodId, name: vod.vodName, pic: vod.vodPic)) {
-                    VodCard(vod: vod, style: vod.style ?? style)
+                Group {
+                    if vod.vodId.hasPrefix("msearch:") {
+                        // 豆瓣等推荐源：没有详情，点击转全局搜索（对应 FongMi 的 msearch）
+                        Button { state.pendingSearch = vod.vodName; state.tab = 2 } label: { VodCard(vod: vod, style: vod.style ?? style) }
+                    } else {
+                        NavigationLink(value: VodRoute(siteKey: vod.siteKey.isEmpty ? siteKey : vod.siteKey, vodId: vod.vodId, name: vod.vodName, pic: vod.vodPic)) {
+                            VodCard(vod: vod, style: vod.style ?? style)
+                        }
+                    }
                 }
                 .buttonStyle(.plain)
                 .onAppear { if vod.id == items.last?.id { onEnd?() } }

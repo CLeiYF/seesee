@@ -66,12 +66,23 @@ struct Site: Decodable, Hashable, Identifiable {
         style = try? c.decodeIfPresent(Style.self, forKey: AnyKey("style"))
     }
 
-    /// iOS 上能跑的站点：CMS(0/1/2)、自定义(4)、JS 爬虫(3 + .js)
+    /// iOS 上能跑的站点：CMS(0/1/2)、自定义(4)、JS 爬虫(3 + .js)、已内置 JS 版的 jar 爬虫
     var isSupported: Bool {
         switch type {
         case 0, 1, 2, 4: true
-        case 3: api.contains(".js")
+        case 3: api.contains(".js") || Self.bundledSpider(api) != nil
         default: false
         }
+    }
+
+    /// jar 爬虫类名 → 包内 JS 版（Resources/js/spider/）。别名指向同一实现。
+    static let bundledSpiders: [String: String] = [
+        "Douban": "Douban", "DoubanLocal": "Douban",
+    ]
+
+    /// `csp_Xxx` → `assets://js/spider/Xxx.js`，没有内置版本返回 nil
+    static func bundledSpider(_ api: String) -> String? {
+        guard api.hasPrefix("csp_"), let name = bundledSpiders[String(api.dropFirst(4))] else { return nil }
+        return "assets://js/spider/\(name).js"
     }
 }

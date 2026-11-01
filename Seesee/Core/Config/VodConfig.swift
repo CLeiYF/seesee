@@ -89,7 +89,8 @@ enum ConfigLoader {
 
     /// 拉取并解码；遇到多仓库（urls）时跟进第一个仓库，返回最终 URL、解码文本与配置
     static func load(_ url: String, fetch: HTTP.Fetch, depth: Int = 0) async throws -> (url: String, text: String, config: VodConfig, depots: [Depot]) {
-        let raw = HTTP.string(try await fetch(try HTTP.get(url)))
+        // FongMi 用 OkHttp 默认 UA 拉配置；部分配置服务器按 UA 分流，浏览器 UA 会被 302 到网页
+        let raw = HTTP.string(try await fetch(try HTTP.get(url, headers: ["User-Agent": "okhttp/3.15"])))
         return try await resolve(url, raw: raw, fetch: fetch, depth: depth)
     }
 

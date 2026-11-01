@@ -28,6 +28,13 @@ struct SearchView: View {
         .searchable(text: $text, placement: .navigationBarDrawer(displayMode: .always), prompt: "片名")
         .onSubmit(of: .search) { search(text) }
         .onChange(of: text) { if text.isEmpty { cancel(); hits = [] } }
+        // msearch 跳转：首次出现或已在搜索页时都要触发
+        .onChange(of: state.pendingSearch, initial: true) {
+            guard let w = state.pendingSearch else { return }
+            state.pendingSearch = nil
+            text = w
+            search(w)
+        }
     }
 
     private var words: some View {
