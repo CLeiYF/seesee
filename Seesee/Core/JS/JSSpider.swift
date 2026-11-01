@@ -106,33 +106,36 @@ actor JSSpider: SiteAPI {
     private func load() async throws -> JSValue {
         if let spider { return spider }
         let api = site.api
-        let (obj, cat) = try runtime.perform { () throws -> (JSValue, Bool) in
+        let (obj, cat, ext) = try runtime.perform { () throws -> (JSValue, Bool, Any) in
             let m = try self.runtime.module(api)
+            let ext = self.ext()
             // cat 风格：export function __jsEvalReturn() { return {init, home, …} }，且 req 用 Promise 版 http
             if let f = m.forProperty("__jsEvalReturn"), f.isObject {
                 self.runtime.context.setObject(self.runtime.context.objectForKeyedSubscript("http"), forKeyedSubscript: "req" as NSString)
-                return (f.call(withArguments: [])!, true)
+                return (f.call(withArguments: [])!, true, ext)
             }
             if let d = m.forProperty("default"), d.isObject {
-                return (d.hasProperty("prototype") && !d.hasProperty("home") ? d.call(withArguments: [])! : d, false)
+                return (d.hasProperty("prototype") && !d.hasProperty("home") ? d.call(withArguments: [])! : d, false, ext)
             }
             // 非模块脚本：写到 globalThis.__JS_SPIDER__
             let g = self.runtime.context.globalObject.forProperty("__JS_SPIDER__")
             guard let g, g.isObject else { throw JSRuntime.Failure.script("脚本没有导出爬虫对象") }
-            return (g, false)
+            return (g, false, ext)
         }
-        _ = try await runtime.call(obj, "init", [cat ? cfg() : ext()])
+        _ = try await runtime.call(obj, "init", [cat ? cfg(ext) : ext])
         spider = obj
         return obj
     }
 
-    /// 非 cat 风格：ext 是 JSON 对象时按对象传入
+    /// ext 是 JSON 对象时按对象传入。在 JS 线程用 JSON.parse，保留键顺序（如 csp_Emby 的 hosts 即线路顺序）
     private func ext() -> Any {
-        guard let d = site.ext.data(using: .utf8), let o = try? JSONSerialization.jsonObject(with: d), o is [String: Any] else { return site.ext }
-        return o
+        guard site.ext.trimmingCharacters(in: .whitespaces).hasPrefix("{"),
+              let v = runtime.context.objectForKeyedSubscript("JSON").invokeMethod("parse", withArguments: [site.ext]),
+              v.isObject else { return site.ext }
+        return v
     }
 
-    private func cfg() -> [String: Any] {
-        ["stype": 3, "skey": site.key, "ext": ext()]
+    private func cfg(_ ext: Any) -> [String: Any] {
+        ["stype": 3, "skey": site.key, "ext": ext]
     }
 }
