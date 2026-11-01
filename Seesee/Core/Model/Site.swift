@@ -106,6 +106,7 @@ struct Site: Decodable, Hashable, Identifiable {
         "DianYingYunJi": "DianYingYunJi",
         "KuaKeS": "KuaKeS",
         "Xb6v": "Xb6v",
+        "Emby": "Emby",
     ]
 
     /// `csp_Xxx` → `assets://js/spider/Xxx.js`，没有内置版本返回 nil

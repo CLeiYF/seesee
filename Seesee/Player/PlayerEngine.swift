@@ -50,6 +50,9 @@ final class PlayerEngine {
     @ObservationIgnored private var resume: Double = 0
     @ObservationIgnored private var pendingSeek: Double = 0
     @ObservationIgnored private var lastReport: Double = 0
+    /// 爬虫播放回传（SiteAPI.report）：当前地址是否已发过 start，上次 progress 的进度
+    @ObservationIgnored private var reported = false
+    @ObservationIgnored private var lastSpiderReport: Double = 0
     /// (线路, 集名, 进度秒, 时长秒)
     @ObservationIgnored var onProgress: (String, String, Double, Double) -> Void = { _, _, _, _ in }
     /// 播放地址变化时通知视图重建播放器
@@ -98,9 +101,13 @@ final class PlayerEngine {
         status = "解析中…"
         let f = flags[flag]
         let ep = f.episodes[episode]
+        let stopMs = reported ? Int(position * 1000) : -1
+        reported = false
         Task {
             do {
                 guard let api else { return }
+                // 先结束上一集的回传，再取新地址（爬虫里的“当前播放”会被 player 覆盖）
+                if stopMs >= 0 { await api.report("stop", positionMs: stopMs) }
                 let r = try await api.player(flag: f.flag, id: ep.url, vipFlags: vipFlags)
                 guard flagIndex == flag, episodeIndex == episode else { return }
                 try await open(r, flag: f.flag)
@@ -213,6 +220,7 @@ final class PlayerEngine {
 
     func stop() {
         report(force: true)
+        if reported, let api { reported = false; let ms = Int(position * 1000); Task { await api.report("stop", positionMs: ms) } }
         watchdog?.cancel()
         sleeper?.cancel()
         coordinator.resetPlayer()
@@ -280,6 +288,7 @@ final class PlayerEngine {
         switch state {
         case .readyToPlay, .bufferFinished:
             watchdog?.cancel()
+            if !reported { reported = true; lastSpiderReport = 0; spiderReport("start") }
             status = ""
             if rate != 1 { coordinator.playbackRate = rate }
             if scale != .fit { applyScale() }
@@ -287,6 +296,8 @@ final class PlayerEngine {
                 coordinator.seek(time: pendingSeek)
                 pendingSeek = 0
             }
+        case .paused:
+            if reported { spiderReport("pause") }
         case .error:
             fail("播放失败")
         default: break
@@ -310,6 +321,14 @@ final class PlayerEngine {
             return
         }
         report(force: false)
+        // 回传最多每 10 秒一次（对应 EmbyMonitor）
+        if reported, abs(current - lastSpiderReport) >= 10 { lastSpiderReport = current; spiderReport("progress") }
+    }
+
+    private func spiderReport(_ state: String) {
+        guard let api else { return }
+        let ms = Int(position * 1000)
+        Task { await api.report(state, positionMs: ms) }
     }
 
     private func report(force: Bool) {

@@ -6,6 +6,12 @@ protocol SiteAPI: Sendable {
     func detail(ids: [String]) async throws -> VodResult
     func search(_ key: String, quick: Bool, page: Int) async throws -> VodResult
     func player(flag: String, id: String, vipFlags: [String]) async throws -> VodResult
+    /// 播放状态回调（start/progress/pause/stop，毫秒），供爬虫做播放回传（如 csp_Emby）
+    func report(_ state: String, positionMs: Int) async
+}
+
+extension SiteAPI {
+    func report(_ state: String, positionMs: Int) async {}
 }
 
 enum SourceError: LocalizedError {
@@ -63,6 +69,7 @@ actor FallbackSpider: SiteAPI {
     func player(flag: String, id: String, vipFlags: [String]) async throws -> VodResult {
         try await run { try await $0.player(flag: flag, id: id, vipFlags: vipFlags) }
     }
+    func report(_ state: String, positionMs: Int) async { await spiders.first?.report(state, positionMs: positionMs) }
 }
 
 struct Unsupported: SiteAPI {

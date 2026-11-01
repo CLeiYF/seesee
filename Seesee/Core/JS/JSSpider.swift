@@ -64,6 +64,12 @@ actor JSSpider: SiteAPI {
         return r
     }
 
+    /// 播放回传：脚本有 report(state, ms) 才调用，错误忽略
+    func report(_ state: String, positionMs: Int) async {
+        guard let spider else { return }
+        _ = try? await runtime.call(spider, "report", [state, positionMs])
+    }
+
     /// 直播源内容（对应 Spider.liveContent），返回 m3u / txt 文本
     func live(_ url: String) async throws -> String {
         try await call("live", [url]) ?? ""

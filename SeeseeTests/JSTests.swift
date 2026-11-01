@@ -268,6 +268,64 @@ final class JSTests: XCTestCase {
         XCTAssertEqual(p.header["Referer"], "https://wangerniu.ok.cc")
     }
 
+    /// 内置 Emby.js：假网络下认证、分类、剧集（Seasons → Episodes）、在线数限制、直链和播放回传
+    func testBundledEmbySpider() async throws {
+        let rt = runtime([:])
+        nonisolated(unsafe) var urls: [String] = []
+        nonisolated(unsafe) var online = "0"
+        try rt.perform {
+            let fake: @convention(block) (String, JSValue) -> JSValue? = { url, _ in
+                urls.append(url)
+                let body: String
+                if url.contains("AuthenticateByName") {
+                    body = #"{"AccessToken":"TK","User":{"Id":"U1"},"SessionInfo":{"DeviceId":"D","Client":"C","DeviceName":"N"}}"#
+                } else if url.contains("/api/online/") { body = online }
+                else if url.contains("/api/devices/") { body = "other" }
+                else if url.contains("/Views") { body = #"{"Items":[{"Id":"v1","Name":"电影"},{"Id":"v2","Name":"播放列表"}]}"# }
+                else if url.contains("/Items/s1?") { body = #"{"Id":"s1","Name":"剧","IsFolder":true,"ProductionYear":2024}"# }
+                else if url.contains("IncludeItemTypes=Episode") { body = #"{"Items":[]}"# }
+                else if url.contains("/Shows/s1/Seasons") { body = #"{"Items":[{"Id":"se1","Name":"第1季"}]}"# }
+                else if url.contains("/Shows/se1/Episodes") { body = #"{"Items":[{"Id":"e1","Name":"第1集#上"},{"Id":"e2","Name":"第2集"}]}"# }
+                else if url.contains("/PlaybackInfo") { body = #"{"MediaSources":[{"Id":"ms1","Name":"1080p","DirectStreamUrl":"/videos/e1/stream?static=true&api_key=TK"}]}"# }
+                else if url.contains("/Items?") { body = #"{"TotalRecordCount":25,"Items":[{"Id":"m1","Name":"片","ProductionYear":2023,"ImageTags":{"Primary":"t"}}]}"# }
+                else { body = "" }
+                return JSValue(object: ["code": 200, "content": body], in: rt.context)
+            }
+            rt.context.setObject(fake, forKeyedSubscript: "_http" as NSString)
+        }
+        let ext = #"{"name":"t1","hosts":{"线1":"http://a.test/","线2":"http://b.test"},"username":"u","password":"p","online":1}"#
+        let spider = JSSpider(site: Site(key: "emby-test-\(UUID())", api: "assets://js/spider/Emby.js", ext: ext, type: 3), runtime: rt)
+        try rt.perform { rt.context.evaluateScript("local.delete('emby', 'new_emby_t1_u')") }
+
+        let home = try await spider.home()
+        XCTAssertEqual(home.classes.map(\.typeName), ["电影"])
+        let c = try await spider.category(tid: "v1", page: 2, filter: false, extend: [:])
+        XCTAssertEqual(c.list.first?.vodPic, "http://a.test/emby/Items/m1/Images/Primary?maxWidth=400&tag=t&quality=90")
+        XCTAssertTrue(urls.last?.contains("StartIndex=10") == true)
+
+        let detail = try await spider.detail(ids: ["s1"])
+        let d = try XCTUnwrap(detail.list.first)
+        XCTAssertEqual(d.vodPlayFrom, "线1$$$线2")
+        XCTAssertEqual(d.vodPlayUrl, "第1季|第1集-上$e1#第1季|第2集$e2$$$第1季|第1集-上$e1#第1季|第2集$e2")
+
+        online = "1"
+        let blocked = try await spider.player(flag: "线2", id: "e1", vipFlags: [])
+        XCTAssertTrue(blocked.msg.contains("已达上限(1)"), blocked.msg)
+        online = "0"
+        let p = try await spider.player(flag: "线2", id: "e1", vipFlags: [])
+        XCTAssertEqual(p.url.v, "http://b.test/emby/videos/e1/stream?static=true&api_key=TK")
+        XCTAssertTrue(p.header["User-Agent"]?.hasPrefix("Hills Windows") == true)
+
+        urls = []
+        await spider.report("start", positionMs: 0)
+        await spider.report("progress", positionMs: 5000)  // 10 秒内，被节流
+        await spider.report("stop", positionMs: 61000)
+        XCTAssertTrue(urls.contains("http://101.43.28.189:3000/api/playback"), "\(urls)")
+        XCTAssertTrue(urls.contains { $0.hasPrefix("http://b.test/emby/Sessions/Playing?") }, "\(urls)")
+        XCTAssertFalse(urls.contains { $0.contains("/Playing/Progress") }, "\(urls)")
+        XCTAssertTrue(urls.contains { $0.contains("/Playing/Stopped?") }, "\(urls)")
+    }
+
     /// 直播 api 为 JS：调用 live(url) 取直播源文本
     func testJSLiveContent() async throws {
         let rt = runtime(["http://h/live.js": "export default { live(url) { return '央视,#genre#\\nCCTV1,' + url + '/1.m3u8' } }"])
