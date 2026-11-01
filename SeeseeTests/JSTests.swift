@@ -267,4 +267,16 @@ final class JSTests: XCTestCase {
         XCTAssertEqual(p.url.v, "https://v/1.m3u8")
         XCTAssertEqual(p.header["Referer"], "https://wangerniu.ok.cc")
     }
+
+    /// 直播 api 为 JS：调用 live(url) 取直播源文本
+    func testJSLiveContent() async throws {
+        let rt = runtime(["http://h/live.js": "export default { live(url) { return '央视,#genre#\\nCCTV1,' + url + '/1.m3u8' } }"])
+        let spider = JSSpider(site: Site(key: "lv", api: "http://h/live.js", type: 3), runtime: rt)
+        let text = try await spider.live("http://src")
+        let groups = LiveParser.parse(text, live: Live())
+        XCTAssertEqual(groups.first?.name, "央视")
+        XCTAssertEqual(groups.first?.channels.first?.urls.first, "http://src/1.m3u8")
+        XCTAssertEqual(LiveLoader.jsAPI("csp_Douban"), "assets://js/spider/Douban.js")
+        XCTAssertNil(LiveLoader.jsAPI(""))
+    }
 }

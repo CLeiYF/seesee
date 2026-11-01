@@ -8,6 +8,10 @@ struct SearchView: View {
     @State private var running = false
     @State private var filter: String?
     @State private var task: Task<Void, Never>?
+    @State private var keyword = ""
+    /// 各站已加载到的页；结果为空或无新内容的站不再翻页
+    @State private var pages: [String: Int] = [:]
+    @State private var exhausted: Set<String> = []
 
     private var items: [Vod] {
         hits.filter { filter == nil || $0.site.key == filter }.flatMap(\.result.list)
@@ -19,7 +23,7 @@ struct SearchView: View {
                 words
             } else {
                 siteBar
-                VodGrid(items: items, style: Style(type: "list"), siteKey: "").padding(.vertical)
+                VodGrid(items: items, style: Style(type: "list"), siteKey: "") { more() }.padding(.vertical)
                 if running { ProgressView().padding() }
                 if !running && hits.isEmpty { Text("没有结果").foregroundStyle(.secondary).padding() }
             }
@@ -87,11 +91,43 @@ struct SearchView: View {
         state.library.addWord(keyword)
         hits = []
         filter = nil
+        pages = [:]
+        exhausted = []
+        self.keyword = keyword
         running = true
         let api: @Sendable (Site) -> SiteAPI = { [fetch = state.fetch] site in makeAPI(site, fetch: fetch) }
         let stream = SearchRunner.run(keyword, sites: state.searchSites, quick: false, api: api)
         task = Task {
             for await hit in stream { hits.append(hit) }
+            running = false
+        }
+    }
+
+    /// 滚到底：给当前筛选的站（或全部还有内容的站）请求下一页，结果并入对应站点
+    private func more() {
+        guard !running, !keyword.isEmpty else { return }
+        let sites = hits.map(\.site).filter { (filter == nil || $0.key == filter) && !exhausted.contains($0.key) }
+        guard !sites.isEmpty else { return }
+        running = true
+        let fetch = state.fetch, word = keyword
+        task = Task {
+            await withTaskGroup(of: (String, VodResult?).self) { group in
+                for site in sites {
+                    let page = (pages[site.key] ?? 1) + 1
+                    group.addTask { (site.key, try? await makeAPI(site, fetch: fetch).search(word, quick: false, page: page)) }
+                }
+                for await (key, r) in group {
+                    guard let i = hits.firstIndex(where: { $0.site.key == key }) else { continue }
+                    let old = Set(hits[i].result.list.map(\.vodId))
+                    var fresh = (r?.list ?? []).filter { !old.contains($0.vodId) }
+                    for j in fresh.indices { fresh[j].siteKey = key }
+                    if fresh.isEmpty { exhausted.insert(key); continue }
+                    pages[key, default: 1] += 1
+                    var res = hits[i].result
+                    res.list += fresh
+                    hits[i] = SearchHit(site: hits[i].site, result: res)
+                }
+            }
             running = false
         }
     }

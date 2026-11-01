@@ -64,6 +64,11 @@ actor JSSpider: SiteAPI {
         return r
     }
 
+    /// 直播源内容（对应 Spider.liveContent），返回 m3u / txt 文本
+    func live(_ url: String) async throws -> String {
+        try await call("live", [url]) ?? ""
+    }
+
     /// 本地代理（对应 Spider.proxyLocal）。返回 (状态码, Content-Type, 内容, 额外响应头)
     /// - 普通：proxy(params) 返回 [code, mime, content, headers?, base64?]
     /// - from=catvod：proxy(url 按 / 拆分的数组, header 对象) 返回 {code, content, buffer, headers}

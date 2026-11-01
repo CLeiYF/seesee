@@ -5,11 +5,24 @@ enum LiveLoader {
     /// 直播源文本：url 支持 http(s)，api 为 JS 爬虫时调用其 live(url)
     static func groups(_ live: Live, fetch: HTTP.Fetch) async throws -> (groups: [LiveGroup], live: Live) {
         guard live.groups.isEmpty else { return (live.groups, live) }
-        let req = try HTTP.get(live.url, headers: live.header, timeout: TimeInterval(live.timeout))
-        let text = HTTP.string(try await fetch(req))
+        let text: String
+        if let js = jsAPI(live.api) {
+            // api 为 JS 爬虫：调用其 live(url)（对应 LiveParser 的 spider().liveContent）
+            let site = Site(key: "live_" + live.name, name: live.name, api: js, ext: live.ext, type: 3)
+            text = try await JSSpider.shared(site).live(live.url)
+        } else {
+            let req = try HTTP.get(live.url, headers: live.header, timeout: TimeInterval(live.timeout))
+            text = HTTP.string(try await fetch(req))
+        }
         var l = live
         if l.epg.isEmpty, LiveParser.isM3U(text) { l.epg = LiveParser.m3uEPG(text) }
         return (LiveParser.parse(text, live: l), l)
+    }
+
+    /// api 可直接写 .js 地址，或 csp_Xxx（走内置 / 外接仓库，取第一个候选）
+    static func jsAPI(_ api: String) -> String? {
+        if api.contains(".js") { return api }
+        return Site.spiderCandidates(api).first
     }
 
     /// xmltv 节目单（所有频道），失败返回空
