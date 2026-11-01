@@ -9,6 +9,9 @@ struct MineView: View {
     @State private var message: String?
     @State private var danmakuAPI = DanmakuAPI.base
     @State private var spiderRepo = Site.spiderRepo
+    @State private var rate = Prefs.rate
+    @State private var autoSwitch = Prefs.autoSwitch
+    @State private var incognito = Prefs.incognito
 
     var body: some View {
         List {
@@ -20,16 +23,24 @@ struct MineView: View {
                 NavigationLink("参与搜索的站点（\(state.searchSites.count)）", value: MinePage.sites)
             }
             Section {
-                TextField("弹幕 API，如 http://192.168.1.7:9321", text: $danmakuAPI)
+                TextField(String("弹幕 API，如 http://192.168.1.7:9321"), text: $danmakuAPI)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-                    .onSubmit { DanmakuAPI.base = danmakuAPI }
-                TextField("JS 爬虫仓库，如 https://x.com/spider/", text: $spiderRepo)
+                    .onChange(of: danmakuAPI) { DanmakuAPI.base = danmakuAPI }
+                TextField(String("JS 爬虫仓库，如 https://x.com/spider/"), text: $spiderRepo)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-                    .onSubmit { Site.spiderRepo = spiderRepo; JSSpider.reset() }
+                    .onChange(of: spiderRepo) { Site.spiderRepo = spiderRepo; JSSpider.reset() }
             } header: {
                 Text("外接")
             } footer: {
                 Text("弹幕 API 兼容 FongMi 自定义弹幕接口（如 danmu_api）。JS 仓库里的 Xxx.js 会替代配置中的 csp_Xxx 站点，仅填写可信地址。")
+            }
+            Section("播放") {
+                Picker("默认倍速", selection: Binding(get: { rate }, set: { rate = $0; Prefs.rate = $0 })) {
+                    ForEach([0.75, 1, 1.25, 1.5, 2] as [Float], id: \.self) { Text("\(String(format: "%g", $0))x").tag($0) }
+                }
+                Toggle("超时或失败自动换线", isOn: Binding(get: { autoSwitch }, set: { autoSwitch = $0; Prefs.autoSwitch = $0 }))
+                Toggle("无痕（不记录观看）", isOn: Binding(get: { incognito }, set: { incognito = $0; Prefs.incognito = $0 }))
+                Button("清除缓存") { Prefs.clearCache(); message = "已清除缓存" }
             }
             Section("备份") {
                 Button("导出备份") { exporting = true }

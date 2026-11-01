@@ -16,7 +16,7 @@ final class PlayerEngine {
     var position: Double = 0
     var duration: Double = 0
     var isPlaying = false
-    var rate: Float = 1
+    var rate: Float = Prefs.rate
     var subs: [Sub] = []
     /// 弹幕
     var danmaku: [DanmakuItem] = []
@@ -266,7 +266,7 @@ final class PlayerEngine {
 
     private func startWatchdog() {
         watchdog?.cancel()
-        guard site.changeable == 1 else { return }
+        guard site.changeable == 1, Prefs.autoSwitch else { return }
         let timeout = site.timeout
         watchdog = Task { [weak self] in
             try? await Task.sleep(for: .seconds(timeout))
@@ -321,6 +321,7 @@ final class PlayerEngine {
     /// 换下一条还没试过、且有这一集的线路
     private func fail(_ message: String) {
         watchdog?.cancel()
+        guard Prefs.autoSwitch else { status = message; failed = true; return }
         let candidates = flags.indices.filter { !tried.contains($0) && flags[$0].episodes.indices.contains(episodeIndex) }
         if let next = candidates.first(where: { $0 > flagIndex }) ?? candidates.first {
             status = "\(message)，切换到 \(flags[next].flag)"

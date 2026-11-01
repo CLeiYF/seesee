@@ -57,6 +57,7 @@ struct DetailView: View {
 
     /// 更新观看记录（保留已有字段，如片头片尾）
     private func record(_ vod: Vod, _ change: (inout HistoryItem) -> Void) {
+        guard !Prefs.incognito else { return }
         var h = history ?? HistoryItem(config: state.configURL, siteKey: route.siteKey, vodId: route.vodId)
         h.vodName = vod.vodName.isEmpty ? route.name : vod.vodName
         h.vodPic = vod.vodPic.isEmpty ? route.pic : vod.vodPic
