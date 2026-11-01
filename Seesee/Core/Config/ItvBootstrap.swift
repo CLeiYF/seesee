@@ -12,9 +12,10 @@ enum ItvBootstrap {
         "https://tv.mangzhexuexi.com",
     ]
 
-    /// 解压目录：<Application Support>/itv，内含 tvbox/（配置）与 TVBox/（cookie 等）
+    /// 解压目录：<Application Support>/itv，内含 config/（包内 TVBoxOSC/tvbox）与 TVBox/（cookie 等）。
+    /// 不能叫 tvbox：大小写不敏感的文件系统上与 TVBox 冲突（模拟器上写入报 EIO）
     static var root: URL { URL.applicationSupportDirectory.appending(path: "itv", directoryHint: .isDirectory) }
-    static var configFile: URL { root.appending(path: "tvbox/local_java.json") }
+    static var configFile: URL { root.appending(path: "config/local_java.json") }
     private static var versionFile: URL { root.appending(path: "TVBox/local_version.txt") }
 
     /// 是否是需要走更新包的入口地址
@@ -54,7 +55,7 @@ enum ItvBootstrap {
         let tmp = root.deletingLastPathComponent().appending(path: "itv.tmp", directoryHint: .isDirectory)
         let fm = FileManager.default
         try? fm.removeItem(at: tmp)
-        _ = try ZipReader.extract(zip, to: tmp.appending(path: "tvbox"), prefix: "TVBoxOSC/tvbox/")
+        _ = try ZipReader.extract(zip, to: tmp.appending(path: "config"), prefix: "TVBoxOSC/tvbox/")
         _ = try ZipReader.extract(zip, to: tmp.appending(path: "TVBox"), prefix: "TVBox/")
         try? fm.removeItem(at: root)
         try fm.moveItem(at: tmp, to: root)
