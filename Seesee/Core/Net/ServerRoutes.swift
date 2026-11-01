@@ -28,5 +28,11 @@ enum ServerRoutes {
             }
             return .text("OK")
         }
+        // /file/<相对路径>：更新包里的文件（配置里 http://127.0.0.1:9978/file/TVBox/xxx.txt 这类引用）
+        server.route("/file/") { req in
+            let rel = String(req.path.dropFirst("/file/".count))
+            guard let data = ItvBootstrap.file(rel) else { return .text("Not Found", status: 404) }
+            return LocalServer.Response(contentType: "text/plain; charset=utf-8", body: data)
+        }
     }
 }
