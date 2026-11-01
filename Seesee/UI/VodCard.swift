@@ -8,7 +8,7 @@ struct VodCard: View {
     var body: some View {
         if style.type == "list" {
             HStack(spacing: 12) {
-                Poster(url: vod.vodPic).frame(width: 60, height: 80).clipShape(RoundedRectangle(cornerRadius: 6))
+                Poster(url: vod.vodPic, icon: vod.isFolder ? "folder" : "film").frame(width: 60, height: 80).clipShape(RoundedRectangle(cornerRadius: 6))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(vod.vodName).font(.body).lineLimit(1)
                     if !vod.vodRemarks.isEmpty { Text(vod.vodRemarks).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
@@ -18,7 +18,7 @@ struct VodCard: View {
             .contentShape(Rectangle())
         } else {
             VStack(spacing: 4) {
-                Poster(url: vod.vodPic)
+                Poster(url: vod.vodPic, icon: vod.isFolder ? "folder" : "film")
                     .aspectRatio(style.effectiveRatio, contentMode: .fit)
                     .clipShape(style.type == "oval" ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 8)))
                     .overlay(alignment: .bottomTrailing) {
@@ -38,17 +38,15 @@ struct VodCard: View {
 
 struct Poster: View {
     let url: String
+    var icon = "film"
     @State private var image: UIImage?
 
     var body: some View {
-        Group {
-            if let image {
-                Image(uiImage: image).resizable().scaledToFill()
-            } else {
-                Rectangle().fill(.quaternary).overlay { Image(systemName: "film").foregroundStyle(.secondary) }
-            }
-        }
-        .clipped()
+        // 占位层决定尺寸，图片作为 overlay 填充，避免 scaledToFill 撑大卡片
+        Rectangle().fill(.quaternary)
+            .overlay { if image == nil { Image(systemName: icon).foregroundStyle(.secondary) } }
+            .overlay { if let image { Image(uiImage: image).resizable().scaledToFill() } }
+            .clipped()
         .accessibilityHidden(true)
         .task(id: url) {
             image = nil
@@ -89,7 +87,12 @@ struct VodGrid: View {
         LazyVGrid(columns: columns, spacing: 12) {
             ForEach(items) { vod in
                 Group {
-                    if vod.vodId.hasPrefix("msearch:") {
+                    if vod.isFolder {
+                        // vod_tag=folder：以 vod_id 为 tid 进入下一级（对应 FolderActivity）
+                        NavigationLink(value: FolderRoute(siteKey: vod.siteKey.isEmpty ? siteKey : vod.siteKey, id: vod.vodId, name: vod.vodName)) {
+                            VodCard(vod: vod, style: vod.style ?? style)
+                        }
+                    } else if vod.vodId.hasPrefix("msearch:") {
                         // 豆瓣等推荐源：没有详情，点击转全局搜索（对应 FongMi 的 msearch）
                         Button { state.pendingSearch = vod.vodName; state.tab = 2 } label: { VodCard(vod: vod, style: vod.style ?? style) }
                     } else {
