@@ -66,7 +66,7 @@ struct Site: Decodable, Hashable, Identifiable {
         style = try? c.decodeIfPresent(Style.self, forKey: AnyKey("style"))
     }
 
-    /// iOS 上能跑的站点：CMS(0/1/2)、自定义(4)、JS 爬虫(3 + .js)、已内置 JS 版的 jar 爬虫
+    /// iOS 上能跑的站点：CMS(0/1/2)、自定义(4)、JS 爬虫(3 + .js)、已内置 JS 版的 jar / py 爬虫
     var isSupported: Bool {
         switch type {
         case 0, 1, 2, 4: true
@@ -121,8 +121,15 @@ struct Site: Decodable, Hashable, Identifiable {
         set { UserDefaults.standard.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "spider.repo") }
     }
 
-    /// csp_Xxx 的候选 JS 地址：仓库优先，其次内置
+    /// itv 配置里的 py 爬虫（文件名 → 内置 JS 版）
+    static let bundledPySpiders: [String: String] = [
+        "JPYS.py": "JPYS",
+        "bilibili_hipy.py": "Bili",
+    ]
+
+    /// csp_Xxx 的候选 JS 地址：仓库优先，其次内置；已内置的 py 爬虫直接用内置版
     static func spiderCandidates(_ api: String, repo: String = spiderRepo) -> [String] {
+        if let name = bundledPySpiders[String(api.split(separator: "/").last ?? "")] { return ["assets://js/spider/\(name).js"] }
         guard api.hasPrefix("csp_"), api.count > 4 else { return [] }
         var out: [String] = []
         if !repo.isEmpty {

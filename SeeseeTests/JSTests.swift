@@ -229,6 +229,9 @@ final class JSTests: XCTestCase {
         XCTAssertEqual(Site.spiderCandidates("csp_Wogg", repo: "https://r/js/"), ["https://r/js/Wogg.js"])
         XCTAssertEqual(Site.spiderCandidates("csp_Wogg", repo: ""), [])
         XCTAssertEqual(Site.spiderCandidates("https://x/a.js", repo: "https://r/"), [])
+        XCTAssertEqual(Site.spiderCandidates("./python/JPYS.py", repo: "https://r/"), ["assets://js/spider/JPYS.js"])
+        XCTAssertEqual(Site.spiderCandidates("./python/bilibili_hipy.py"), ["assets://js/spider/Bili.js"])
+        XCTAssertEqual(Site.spiderCandidates("./py/爱听音乐.py"), [])
     }
 
     /// 仓库里的脚本加载失败时退回下一个实现
