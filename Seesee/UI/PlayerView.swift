@@ -11,6 +11,7 @@ struct PlayerView: View {
     var parses: [Parse] = []
     var resume: Double = 0
     var skip = PlaybackSkip()
+    var vodName = ""
     /// (线路, 集名, 进度秒, 时长秒)
     var onProgress: (String, String, Double, Double) -> Void = { _, _, _, _ in }
     /// 用户修改片头片尾后回写
@@ -59,6 +60,7 @@ struct PlayerView: View {
                 source = Source(url: url, options: options)
             }
             engine.skip = skip
+            engine.vodName = vodName
             engine.start(api: api, site: site, flags: flags, flag: flag, episode: episode, vipFlags: vipFlags,
                          parses: parses, parse: parses.first, resume: resume)
         }

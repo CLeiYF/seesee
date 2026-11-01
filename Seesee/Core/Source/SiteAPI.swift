@@ -28,12 +28,41 @@ func makeAPI(_ site: Site, fetch: @escaping HTTP.Fetch = HTTP.live) -> SiteAPI {
     }
 }
 
-/// csp_Xxx 有内置 JS 版时改写 api 后按 JS 爬虫运行
+/// csp_Xxx：按候选顺序（外接仓库 → 内置）改写 api 后按 JS 爬虫运行
 private func bundled(_ site: Site) -> SiteAPI {
-    guard let js = Site.bundledSpider(site.api) else { return Unsupported(api: site.api) }
-    var s = site
-    s.api = js
-    return JSSpider.shared(s)
+    let candidates = Site.spiderCandidates(site.api)
+    guard !candidates.isEmpty else { return Unsupported(api: site.api) }
+    return FallbackSpider(spiders: candidates.map { var s = site; s.api = $0; return JSSpider.shared(s) })
+}
+
+/// 依次尝试多个实现：当前的加载失败（如仓库里没有这个文件）就换下一个，成功后固定使用
+actor FallbackSpider: SiteAPI {
+    private var spiders: [SiteAPI]
+
+    init(spiders: [SiteAPI]) { self.spiders = spiders }
+
+    private func run(_ body: (SiteAPI) async throws -> VodResult) async throws -> VodResult {
+        var last: Error = SourceError.unsupported("")
+        while let s = spiders.first {
+            do { return try await body(s) } catch {
+                last = error
+                // ponytail: 任何错误都换下一个；只剩最后一个时保留，避免网络抖动后彻底不可用
+                guard spiders.count > 1 else { break }
+                spiders.removeFirst()
+            }
+        }
+        throw last
+    }
+
+    func home() async throws -> VodResult { try await run { try await $0.home() } }
+    func category(tid: String, page: Int, filter: Bool, extend: [String: String]) async throws -> VodResult {
+        try await run { try await $0.category(tid: tid, page: page, filter: filter, extend: extend) }
+    }
+    func detail(ids: [String]) async throws -> VodResult { try await run { try await $0.detail(ids: ids) } }
+    func search(_ key: String, quick: Bool, page: Int) async throws -> VodResult { try await run { try await $0.search(key, quick: quick, page: page) } }
+    func player(flag: String, id: String, vipFlags: [String]) async throws -> VodResult {
+        try await run { try await $0.player(flag: flag, id: id, vipFlags: vipFlags) }
+    }
 }
 
 struct Unsupported: SiteAPI {

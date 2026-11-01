@@ -55,4 +55,34 @@ final class DanmakuTests: XCTestCase {
         // 两条顶部弹幕时间重叠 → 不同轨道
         XCTAssertNotEqual(lanes[40], lanes[41])
     }
+
+    func testDanmakuAPIRequestAndSources() throws {
+        let r = try XCTUnwrap(DanmakuAPI.request(base: "http://h:9321/", name: "斗破苍穹", episode: "第1集"))
+        let c = try XCTUnwrap(URLComponents(url: r.url!, resolvingAgainstBaseURL: false))
+        XCTAssertEqual(c.path, "/api/v2/fongmi/danmaku")
+        XCTAssertEqual(c.queryItems?.first { $0.name == "name" }?.value, "斗破苍穹")
+        XCTAssertEqual(c.queryItems?.first { $0.name == "episode" }?.value, "第1集")
+        // 已带接口路径（含 /danmaku 短地址）时不再追加
+        XCTAssertEqual(try DanmakuAPI.request(base: "http://h/danmaku", name: "a", episode: "")?.url?.path, "/danmaku")
+        XCTAssertNil(try DanmakuAPI.request(base: "", name: "a", episode: ""))
+        XCTAssertNil(try DanmakuAPI.request(base: "http://h", name: "", episode: ""))
+        let list = DanmakuAPI.sources(Data(#"[{"name":"A - 第1集","url":"http://h/api/v2/comment/1?format=xml"},{"name":"x"}]"#.utf8))
+        XCTAssertEqual(list.map(\.url), ["http://h/api/v2/comment/1?format=xml"])
+        XCTAssertTrue(DanmakuAPI.sources(Data("oops".utf8)).isEmpty)
+    }
+
+    /// danmu_api 实际返回的 XML（截取）能被解析
+    func testParsesDanmuAPIXML() throws {
+        let xml = """
+        <?xml version="1.0" ?>
+        <i>
+            <d p="0.0,1,25,16777215,1751533608,0,0,19382106282">今天斗破不霸榜 ️♡448</d>
+            <d p="12.5,5,25,16711680,1751533608,0,0,1">顶部</d>
+        </i>
+        """
+        let items = DanmakuParser.parse(xml)
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual(items.last?.kind, .top)
+        XCTAssertEqual(items.last?.color, 0xFF0000)
+    }
 }

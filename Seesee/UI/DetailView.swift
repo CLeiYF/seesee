@@ -38,7 +38,7 @@ struct DetailView: View {
             if let site, let vod {
                 PlayerView(api: state.api(site), site: site, flags: t.flags, flag: t.flag, episode: t.episode,
                            vipFlags: state.config.flags, parses: state.config.parses, resume: t.resume,
-                           skip: history?.skip ?? PlaybackSkip(),
+                           skip: history?.skip ?? PlaybackSkip(), vodName: vod.vodName,
                            onProgress: { flag, episode, position, duration in
                                record(vod) { $0.flag = flag; $0.episode = episode; $0.position = position; $0.duration = duration }
                            },

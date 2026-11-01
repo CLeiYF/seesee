@@ -33,7 +33,8 @@ final class AppState {
 
     /// 启动时恢复最近一次使用的配置
     func restore() async {
-        guard configURL.isEmpty else { return }
+        // 单元测试以 App 为宿主运行：恢复配置会 JSSpider.reset()，清掉测试登记的爬虫
+        guard configURL.isEmpty, NSClassFromString("XCTestCase") == nil else { return }
         // ponytail: 启动参数 `-config <url>` 直接加载，便于模拟器调试
         if let url = UserDefaults.standard.string(forKey: "config") { return await load(url) }
         if let last = library.data.configs.first { await load(last.url) }

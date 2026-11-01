@@ -78,3 +78,26 @@ enum DanmakuParser {
         return items[lo..<end]
     }
 }
+
+/// 外接弹幕 API（FongMi 自定义弹幕接口，如 danmu_api 的 /api/v2/fongmi/danmaku）
+/// 返回 [{name, url}]，url 指向 XML 弹幕
+enum DanmakuAPI {
+    /// 设置里填的地址；可以是部署根地址，也可以是完整接口地址
+    static var base: String {
+        get { UserDefaults.standard.string(forKey: "danmaku.api") ?? "" }
+        set { UserDefaults.standard.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "danmaku.api") }
+    }
+
+    static func request(base: String, name: String, episode: String) throws -> URLRequest? {
+        var b = base.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !b.isEmpty, !name.isEmpty else { return nil }
+        while b.hasSuffix("/") { b.removeLast() }
+        // 只填根地址时补上接口路径（danmu_api 根地址也兼容，这里统一走完整路径）
+        if !b.contains("/danmaku") { b += "/api/v2/fongmi/danmaku" }
+        return try HTTP.get(b, query: [("name", name), ("episode", episode)], timeout: 20)
+    }
+
+    static func sources(_ data: Data) -> [DanmakuSource] {
+        ((try? JSONDecoder().decode([Lossy<DanmakuSource>].self, from: data)) ?? []).compactMap(\.value).filter { !$0.url.isEmpty }
+    }
+}

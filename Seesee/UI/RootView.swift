@@ -21,8 +21,18 @@ struct RootView: View {
         .fullScreenCover(item: $debugPlay) { r in DetailView(route: r.route, autoplay: r.flag) }
         .onChange(of: state.home?.key) {
             if debugPlay == nil, let arg = UserDefaults.standard.string(forKey: "play") {
-                let p = arg.split(separator: "/").map(String.init)
+                let p = arg.split(separator: "/").map { $0.removingPercentEncoding ?? String($0) }
                 if p.count == 3 { debugPlay = DebugPlay(route: VodRoute(siteKey: p[0], vodId: p[1], name: "", pic: ""), flag: Int(p[2]) ?? 0) }
+            }
+        }
+        #endif
+        #if DEBUG
+        // ponytail: 调试用 `-search <词>` 配置加载后直接搜索（simctl 无法输入）
+        .onChange(of: state.home?.key) {
+            if let w = UserDefaults.standard.string(forKey: "search"), state.pendingSearch == nil {
+                UserDefaults.standard.removeObject(forKey: "search")
+                state.pendingSearch = w
+                state.tab = 2
             }
         }
         #endif

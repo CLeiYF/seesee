@@ -171,7 +171,10 @@ struct JSRequest {
             setBody(&r)
         case "header", "head":
             r.httpMethod = "HEAD"
-        default: break
+        case "get": break
+        default: // PUT / DELETE / PROPFIND（WebDAV）等
+            r.httpMethod = method.uppercased()
+            setBody(&r)
         }
         let s = redirect ? session : URLSession(configuration: .default, delegate: NoRedirect(), delegateQueue: nil)
         guard let (data, http) = try? syncFetch(s, r) else { return res }

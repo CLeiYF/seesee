@@ -37,6 +37,8 @@ final class PlayerEngine {
 
     @ObservationIgnored private var api: SiteAPI?
     @ObservationIgnored private var site = Site()
+    /// 片名（外接弹幕 API 按它匹配）
+    @ObservationIgnored var vodName = ""
     @ObservationIgnored private var vipFlags: [String] = []
     @ObservationIgnored private var parses: [Parse] = []
     @ObservationIgnored private var parse: Parse?
@@ -148,6 +150,19 @@ final class PlayerEngine {
         }
     }
 
+    /// 结果没带弹幕时，按片名 + 集名请求设置里的弹幕 API，取第一条加载（失败静默）
+    private func searchDanmaku() {
+        let (name, ep, flag, episode) = (vodName, title, flagIndex, episodeIndex)
+        guard let req = try? DanmakuAPI.request(base: DanmakuAPI.base, name: name, episode: ep) else { return }
+        Task {
+            guard let data = try? await fetch(req) else { return }
+            let list = DanmakuAPI.sources(data)
+            guard flagIndex == flag, episodeIndex == episode, danmakuSources.isEmpty, let first = list.first else { return }
+            danmakuSources = list
+            loadDanmaku(first)
+        }
+    }
+
     func stop() {
         report(force: true)
         watchdog?.cancel()
@@ -186,7 +201,7 @@ final class PlayerEngine {
         subs = r.subs
         danmakuSources = r.danmaku
         danmaku = []
-        if let first = r.danmaku.first { loadDanmaku(first) }
+        if let first = r.danmaku.first { loadDanmaku(first) } else { searchDanmaku() }
         status = "缓冲中…"
         bind()
         onURL(url, o)

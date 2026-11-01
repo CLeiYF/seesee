@@ -7,6 +7,8 @@ struct MineView: View {
     @State private var exporting = false
     @State private var importing = false
     @State private var message: String?
+    @State private var danmakuAPI = DanmakuAPI.base
+    @State private var spiderRepo = Site.spiderRepo
 
     var body: some View {
         List {
@@ -16,6 +18,18 @@ struct MineView: View {
             }
             Section("搜索站点") {
                 NavigationLink("参与搜索的站点（\(state.searchSites.count)）", value: MinePage.sites)
+            }
+            Section {
+                TextField("弹幕 API，如 http://192.168.1.7:9321", text: $danmakuAPI)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                    .onSubmit { DanmakuAPI.base = danmakuAPI }
+                TextField("JS 爬虫仓库，如 https://x.com/spider/", text: $spiderRepo)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                    .onSubmit { Site.spiderRepo = spiderRepo; JSSpider.reset() }
+            } header: {
+                Text("外接")
+            } footer: {
+                Text("弹幕 API 兼容 FongMi 自定义弹幕接口（如 danmu_api）。JS 仓库里的 Xxx.js 会替代配置中的 csp_Xxx 站点，仅填写可信地址。")
             }
             Section("备份") {
                 Button("导出备份") { exporting = true }
