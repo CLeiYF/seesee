@@ -72,9 +72,6 @@ final class PlayerEngine {
         self.fetch = fetch
         self.resume = resume
         tried = []
-        coordinator.onPlay = { [weak self] current, total in self?.tick(current, total) }
-        coordinator.onStateChanged = { [weak self] _, state in self?.changed(state) }
-        coordinator.onFinish = { [weak self] _, error in self?.finished(error) }
         play(flag: flag, episode: episode)
     }
 
@@ -113,6 +110,15 @@ final class PlayerEngine {
     }
 
     func seek(_ time: Double) { coordinator.seek(time: time) }
+
+    /// 新地址与当前相同：不会触发 readyToPlay，直接跳到起点并清掉缓冲提示
+    func restartSameURL() {
+        watchdog?.cancel()
+        coordinator.seek(time: pendingSeek)
+        pendingSeek = 0
+        coordinator.playerLayer?.play()
+        status = ""
+    }
 
     func setRate(_ r: Float) {
         rate = r
@@ -182,11 +188,19 @@ final class PlayerEngine {
         danmaku = []
         if let first = r.danmaku.first { loadDanmaku(first) }
         status = "缓冲中…"
+        bind()
         onURL(url, o)
         startWatchdog()
     }
 
     /// 站点 changeable=0 时不自动换线（对应 isChangeable() ? timeout : -1）
+    /// 换地址时 SwiftUI 重建 KSVideoPlayer，dismantleUIView 会调 resetPlayer 清空回调，所以每次打开都重新挂上
+    private func bind() {
+        coordinator.onPlay = { [weak self] current, total in self?.tick(current, total) }
+        coordinator.onStateChanged = { [weak self] _, state in self?.changed(state) }
+        coordinator.onFinish = { [weak self] _, error in self?.finished(error) }
+    }
+
     private func startWatchdog() {
         watchdog?.cancel()
         guard site.changeable == 1 else { return }

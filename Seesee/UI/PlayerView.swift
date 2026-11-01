@@ -22,9 +22,7 @@ struct PlayerView: View {
     @State private var controls = true
     @State private var casting = false
 
-    /// 每次地址变化换一个 id，让 KSVideoPlayer 重建
-    private struct Source: Identifiable {
-        let id = UUID()
+    private struct Source {
         let url: URL
         let options: KSOptions
     }
@@ -33,14 +31,14 @@ struct PlayerView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             if let source {
+                // 不用 .id() 重建：重建时旧视图的 dismantleUIView 会晚于新视图调用 resetPlayer，把新播放器清掉
                 KSVideoPlayer(coordinator: engine.coordinator, url: source.url, options: source.options)
-                    .id(source.id)
                     .ignoresSafeArea()
                     .onTapGesture { withAnimation { controls.toggle() } }
             }
             if engine.showDanmaku, !engine.danmaku.isEmpty {
+                // 留在安全区内，避开灵动岛/刘海
                 DanmakuOverlay(items: engine.danmaku, time: engine.position, at: engine.positionAt, playing: engine.isPlaying)
-                    .ignoresSafeArea()
             }
             SubtitleOverlay(model: engine.coordinator.subtitleModel)
                 .allowsHitTesting(false)
@@ -55,7 +53,11 @@ struct PlayerView: View {
         .statusBarHidden()
         .onAppear {
             engine.onProgress = onProgress
-            engine.onURL = { url, options in source = Source(url: url, options: options) }
+            engine.onURL = { url, options in
+                // 地址相同（相同直链的另一集、重试）时 KSPlayer 视为同一媒体不会重新加载，回到起点即可
+                if source?.url == url { engine.restartSameURL() }
+                source = Source(url: url, options: options)
+            }
             engine.skip = skip
             engine.start(api: api, site: site, flags: flags, flag: flag, episode: episode, vipFlags: vipFlags,
                          parses: parses, parse: parses.first, resume: resume)

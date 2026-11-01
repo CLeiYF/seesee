@@ -36,7 +36,8 @@ enum HTTP {
 
     /// 默认 UA + 配置 headers + 调用方 headers（后者优先）
     static func request(_ url: URL, headers: [String: String], timeout: TimeInterval) -> URLRequest {
-        var req = URLRequest(url: url, timeoutInterval: timeout)
+        // 配置/直播源/EPG 会随时更新，不用 URLCache 的启发式缓存（服务器没给 Cache-Control 时也会被缓存）
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: timeout)
         req.setValue(chrome, forHTTPHeaderField: "User-Agent")
         let host = url.host?.lowercased() ?? ""
         for item in hostHeaders where item.matches(host) {

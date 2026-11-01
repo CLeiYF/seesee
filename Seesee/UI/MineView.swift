@@ -11,11 +11,11 @@ struct MineView: View {
     var body: some View {
         List {
             Section {
-                NavigationLink("观看记录") { HistoryView() }
-                NavigationLink("收藏") { KeepView() }
+                NavigationLink("观看记录", value: MinePage.history)
+                NavigationLink("收藏", value: MinePage.keep)
             }
             Section("搜索站点") {
-                NavigationLink("参与搜索的站点（\(state.searchSites.count)）") { SearchSitesView() }
+                NavigationLink("参与搜索的站点（\(state.searchSites.count)）", value: MinePage.sites)
             }
             Section("备份") {
                 Button("导出备份") { exporting = true }
@@ -23,6 +23,15 @@ struct MineView: View {
             }
         }
         .navigationTitle("我的")
+        // 与 VodRoute 一样用 value 导航：闭包式 NavigationLink 与 navigationDestination(for:) 混用时，
+        // 从子页面再 push VodRoute 会被系统丢弃
+        .navigationDestination(for: MinePage.self) { page in
+            switch page {
+            case .history: HistoryView()
+            case .keep: KeepView()
+            case .sites: SearchSitesView()
+            }
+        }
         .fileExporter(isPresented: $exporting, document: BackupFile(data: (try? state.library.export()) ?? Data()),
                       contentType: .json, defaultFilename: "seesee-backup") { result in
             if case .failure(let e) = result { message = e.localizedDescription }
@@ -117,3 +126,5 @@ private func row(_ pic: String, _ title: String, _ subtitle: String) -> some Vie
         }
     }
 }
+
+enum MinePage: Hashable { case history, keep, sites }

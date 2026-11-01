@@ -34,4 +34,25 @@ final class DanmakuTests: XCTestCase {
         XCTAssertEqual(VodResult.json(#"{"danmaku":[{"url":"u2"}]}"#).danmaku.first?.name, "u2")
         XCTAssertTrue(VodResult.json("{}").danmaku.isEmpty)
     }
+
+    func testLanesNeverOverlapInSameLane() {
+        // 0.5 秒一条，同一时刻也有多条
+        var items: [DanmakuItem] = []
+        for i in 0..<40 { items.append(DanmakuItem(time: Double(i / 2) * 0.5, kind: .scroll, size: 25, color: 0xFFFFFF, text: String(repeating: "弹", count: 3 + i % 5))) }
+        items.append(DanmakuItem(time: 1, kind: .top, size: 25, color: 0, text: "顶"))
+        items.append(DanmakuItem(time: 1.1, kind: .top, size: 25, color: 0, text: "顶2"))
+        let size = CGSize(width: 400, height: 300)
+        let lanes = LaneCache.assign(items, size: size, lineHeight: 28, crossing: 8, stay: 4)
+        let speed = size.width / 8
+        // 同轨道相邻两条：后一条出发时，前一条尾部已进入屏幕（固定速度 → 永远不会追上）
+        var last: [Int: DanmakuItem] = [:]
+        for (i, d) in items.enumerated() where d.kind == .scroll {
+            guard let l = lanes[i] else { continue }
+            if let p = last[l] { XCTAssertGreaterThanOrEqual(d.time - p.time, Double(DanmakuOverlay.width(p) / speed) - 1e-9) }
+            last[l] = d
+        }
+        XCTAssertGreaterThan(lanes.compactMap { $0 }.count, 10)
+        // 两条顶部弹幕时间重叠 → 不同轨道
+        XCTAssertNotEqual(lanes[40], lanes[41])
+    }
 }
