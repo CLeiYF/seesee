@@ -1,4 +1,6 @@
+import AVFAudio
 import KSPlayer
+import MediaPlayer
 import SwiftUI
 
 struct PlayerView: View {
@@ -26,7 +28,7 @@ struct PlayerView: View {
     @State private var episodes = false
     /// 手势中的提示（拖动进度、亮度、倍速）
     @State private var hint: String?
-    @State private var dragStart: (x: Double, value: Double, horizontal: Bool?)?
+    @State private var dragStart: (x: Double, value: Double, horizontal: Bool, left: Bool)?
     @State private var holdRate: Float?
 
     private struct Source {
@@ -42,7 +44,9 @@ struct PlayerView: View {
                 KSVideoPlayer(coordinator: engine.coordinator, url: source.url, options: source.options)
                     .ignoresSafeArea()
             }
-            // 手势层：单击显隐、双击暂停、横向拖动快进、左半屏竖拖亮度、长按 2 倍速
+            // 隐藏的系统音量控件：右半屏竖拖改音量要用它的滑块，放在画面里也能顶掉系统音量 HUD
+            SystemVolume().frame(width: 1, height: 1).opacity(0.01).allowsHitTesting(false)
+            // 手势层：单击显隐、双击暂停、横向拖动快进、左半屏竖拖亮度、右半屏竖拖音量、长按 2 倍速
             GeometryReader { geo in
                 Color.clear.contentShape(Rectangle())
                     .onTapGesture(count: 2) { if !locked { engine.toggle() } }
@@ -116,24 +120,30 @@ struct PlayerView: View {
         }
     }
 
-    /// 横向：拖动快进（满屏宽 = 3 分钟）；竖向左半屏：亮度
+    /// 横向：拖动快进（满屏宽 = 3 分钟）；竖向左半屏：亮度，右半屏：音量
     private func drag(_ size: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 12)
             .onChanged { g in
                 if dragStart == nil {
                     let horizontal = abs(g.translation.width) > abs(g.translation.height)
                     let left = g.startLocation.x < size.width / 2
-                    if !horizontal && !left { return } // 右半屏竖拖留给系统（音量需 MPVolumeView）
-                    dragStart = (Double(g.startLocation.x), horizontal ? engine.position : Double(UIScreen.main.brightness), horizontal)
+                    let value = horizontal ? engine.position
+                        : left ? Double(UIScreen.main.brightness) : Double(AVAudioSession.sharedInstance().outputVolume)
+                    dragStart = (Double(g.startLocation.x), value, horizontal, left)
                 }
-                guard let d = dragStart, let horizontal = d.horizontal else { return }
-                if horizontal {
+                guard let d = dragStart else { return }
+                if d.horizontal {
                     let t = min(max(d.value + Double(g.translation.width / size.width) * 180, 0), engine.duration)
                     hint = "\(time(t)) / \(time(engine.duration))"
                 } else {
                     let b = min(max(d.value - Double(g.translation.height / size.height), 0), 1)
-                    UIScreen.main.brightness = CGFloat(b)
-                    hint = "亮度 \(Int(b * 100))%"
+                    if d.left {
+                        UIScreen.main.brightness = CGFloat(b)
+                        hint = "亮度 \(Int(b * 100))%"
+                    } else {
+                        SystemVolume.set(Float(b))
+                        hint = "音量 \(Int(b * 100))%"
+                    }
                 }
             }
             .onEnded { g in
@@ -318,4 +328,19 @@ private struct SubtitleOverlay: View {
         .padding(.bottom, 48)
         .padding(.horizontal)
     }
+}
+
+/// 系统音量只能通过 MPVolumeView 里的滑块改（没有公开 API）；视图需在窗口里才生效
+private struct SystemVolume: UIViewRepresentable {
+    nonisolated(unsafe) private static weak var slider: UISlider?
+
+    static func set(_ value: Float) { slider?.setValue(value, animated: false) }
+
+    func makeUIView(context: Context) -> MPVolumeView {
+        let v = MPVolumeView(frame: .zero)
+        Self.slider = v.subviews.compactMap { $0 as? UISlider }.first
+        return v
+    }
+
+    func updateUIView(_ uiView: MPVolumeView, context: Context) {}
 }
