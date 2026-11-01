@@ -222,4 +222,49 @@ final class JSTests: XCTestCase {
         XCTAssertEqual(r.value(forHTTPHeaderField: "User-Agent"), "UA/1")
         XCTAssertEqual(Poster.request("https://img/x@2x.png")?.url?.absoluteString, "https://img/x@2x.png")
     }
+
+    func testSpiderCandidatesRepoThenBundled() {
+        XCTAssertEqual(Site.spiderCandidates("csp_DoubanLocal", repo: "https://r/js"),
+                       ["https://r/js/DoubanLocal.js", "assets://js/spider/Douban.js"])
+        XCTAssertEqual(Site.spiderCandidates("csp_Wogg", repo: "https://r/js/"), ["https://r/js/Wogg.js"])
+        XCTAssertEqual(Site.spiderCandidates("csp_Wogg", repo: ""), [])
+        XCTAssertEqual(Site.spiderCandidates("https://x/a.js", repo: "https://r/"), [])
+    }
+
+    /// 仓库里的脚本加载失败时退回下一个实现
+    func testFallbackSpiderUsesNextOnFailure() async throws {
+        let rt = runtime(["http://ok/b.js": "export default { home() { return JSON.stringify({ class: [{ type_id: 'b', type_name: 'B' }] }) } }"])
+        let missing = JSSpider(site: Site(key: "f", api: "http://missing/a.js", type: 3), runtime: rt)
+        let ok = JSSpider(site: Site(key: "f", api: "http://ok/b.js", type: 3), runtime: rt)
+        let f = FallbackSpider(spiders: [missing, ok])
+        let h = try await f.home()
+        XCTAssertEqual(h.classes.first?.typeId, "b")
+    }
+
+    /// 内置 Jianpian.js 在 JavaScriptCore 里：DNS TXT 选域名、详情拼线路、播放直出
+    func testBundledJianpianSpider() async throws {
+        let rt = runtime([:])
+        try rt.perform {
+            let fake: @convention(block) (String, JSValue) -> JSValue? = { url, _ in
+                let body: String
+                if url.contains("alidns") { body = #"{"Answer":[{"data":"\"dead.cc,ok.cc\""}]}"# }
+                else if url.contains("dead.cc") { body = "<html>" }
+                else if url.contains("appAuthConfig") { body = #"{"data":{"imgDomain":"img.x"}}"# }
+                else if url.contains("detailv2") {
+                    body = #"{"data":{"id":7,"title":"T","thumbnail":"/p.jpg","source_list_source":[{"name":"线1","source_list":[{"source_name":"第1集","url":"https://v/1.m3u8"}]}]}}"#
+                } else { body = "{}" }
+                return JSValue(object: ["code": 200, "content": body], in: rt.context)
+            }
+            rt.context.setObject(fake, forKeyedSubscript: "_http" as NSString)
+        }
+        let spider = JSSpider(site: Site(key: "jp", api: "assets://js/spider/Jianpian.js", type: 3), runtime: rt)
+        let d = try await spider.detail(ids: ["7"]).list.first
+        XCTAssertEqual(d?.vodName, "T")
+        XCTAssertEqual(d?.vodPic, "http://img.x/p.jpg")
+        XCTAssertEqual(d?.vodPlayFrom, "线1")
+        XCTAssertEqual(d?.vodPlayUrl, "第1集$https://v/1.m3u8")
+        let p = try await spider.player(flag: "线1", id: "https://v/1.m3u8", vipFlags: [])
+        XCTAssertEqual(p.url.v, "https://v/1.m3u8")
+        XCTAssertEqual(p.header["Referer"], "https://wangerniu.ok.cc")
+    }
 }

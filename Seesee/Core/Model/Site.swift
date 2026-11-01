@@ -70,7 +70,8 @@ struct Site: Decodable, Hashable, Identifiable {
     var isSupported: Bool {
         switch type {
         case 0, 1, 2, 4: true
-        case 3: api.contains(".js") || Self.bundledSpider(api) != nil
+        // ponytail: 填了仓库就把所有 csp_ 当可用，仓库里没有的在首次调用时报错
+        case 3: api.contains(".js") || !Self.spiderCandidates(api).isEmpty
         default: false
         }
     }
@@ -78,11 +79,55 @@ struct Site: Decodable, Hashable, Identifiable {
     /// jar 爬虫类名 → 包内 JS 版（Resources/js/spider/）。别名指向同一实现。
     static let bundledSpiders: [String: String] = [
         "Douban": "Douban", "DoubanLocal": "Douban",
+        "Jianpian": "Jianpian",
+        "Dm84": "Dm84",
+        "Ysj": "Ysj",
+        "Zxzj": "Zxzj",
+        "FirstAid": "FirstAid",
+        "Kanqiu": "Kanqiu",
+        "AppYsV2": "AppYsV2",
+        "AList": "AList",
+        "WebDAV": "WebDAV",
+        "XPath": "XPath",
+        "XPathFilter": "XPathFilter",
+        "XPathMac": "XPathMac",
+        "XPathMacFilter": "XPathMacFilter",
+        "Quark": "Quark",
+        "UC": "UC",
+        "TianYi": "TianYi",
+        "Pan123": "Pan123",
+        "Ali": "Ali",
+        "YiDongYun": "YiDongYun",
+        "TgSearchQuark": "TgSearchQuark",
+        "TgSearch123": "TgSearch123",
+        "TgSearch139": "TgSearch139",
+        "TgSearch189": "TgSearch189",
+        "TgSearchBaidu": "TgSearchBaidu",
+        "DianYingYunJi": "DianYingYunJi",
+        "KuaKeS": "KuaKeS",
+        "Xb6v": "Xb6v",
     ]
 
     /// `csp_Xxx` → `assets://js/spider/Xxx.js`，没有内置版本返回 nil
     static func bundledSpider(_ api: String) -> String? {
         guard api.hasPrefix("csp_"), let name = bundledSpiders[String(api.dropFirst(4))] else { return nil }
         return "assets://js/spider/\(name).js"
+    }
+
+    /// 外接 JS 爬虫仓库（目录地址）。设置后 csp_Xxx 先找 `<仓库>/Xxx.js`
+    nonisolated(unsafe) static var spiderRepo: String {
+        get { UserDefaults.standard.string(forKey: "spider.repo") ?? "" }
+        set { UserDefaults.standard.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "spider.repo") }
+    }
+
+    /// csp_Xxx 的候选 JS 地址：仓库优先，其次内置
+    static func spiderCandidates(_ api: String, repo: String = spiderRepo) -> [String] {
+        guard api.hasPrefix("csp_"), api.count > 4 else { return [] }
+        var out: [String] = []
+        if !repo.isEmpty {
+            out.append(repo.hasSuffix("/") ? repo + api.dropFirst(4) + ".js" : repo + "/" + api.dropFirst(4) + ".js")
+        }
+        if let b = bundledSpider(api) { out.append(b) }
+        return out
     }
 }
