@@ -54,6 +54,7 @@ final class AppState {
                 // itv 入口：改用更新包里的本地配置（对应 spider1202.jar 的 ConfigManager）
                 try await {
                     let local = try await ItvBootstrap.prepare(fetch: fetch)
+                    ItvBootstrap.startHeartbeat(fetch: fetch)
                     return try await ConfigLoader.resolve(local.url, raw: local.text, fetch: fetch)
                 }()
             } else {
