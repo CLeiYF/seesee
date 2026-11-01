@@ -22,6 +22,12 @@ struct PlayerView: View {
     @State private var source: Source?
     @State private var controls = true
     @State private var casting = false
+    @State private var locked = false
+    @State private var episodes = false
+    /// 手势中的提示（拖动进度、亮度、倍速）
+    @State private var hint: String?
+    @State private var dragStart: (x: Double, value: Double, horizontal: Bool?)?
+    @State private var holdRate: Float?
 
     private struct Source {
         let url: URL
@@ -35,15 +41,29 @@ struct PlayerView: View {
                 // 不用 .id() 重建：重建时旧视图的 dismantleUIView 会晚于新视图调用 resetPlayer，把新播放器清掉
                 KSVideoPlayer(coordinator: engine.coordinator, url: source.url, options: source.options)
                     .ignoresSafeArea()
-                    .onTapGesture { withAnimation { controls.toggle() } }
             }
+            // 手势层：单击显隐、双击暂停、横向拖动快进、左半屏竖拖亮度、长按 2 倍速
+            GeometryReader { geo in
+                Color.clear.contentShape(Rectangle())
+                    .onTapGesture(count: 2) { if !locked { engine.toggle() } }
+                    .onTapGesture { withAnimation { controls.toggle() } }
+                    .gesture(locked ? nil : drag(geo.size))
+                    .simultaneousGesture(locked ? nil : hold)
+            }
+            .ignoresSafeArea()
             if engine.showDanmaku, !engine.danmaku.isEmpty {
                 // 留在安全区内，避开灵动岛/刘海
                 DanmakuOverlay(items: engine.danmaku, time: engine.position, at: engine.positionAt, playing: engine.isPlaying)
             }
             SubtitleOverlay(model: engine.coordinator.subtitleModel)
                 .allowsHitTesting(false)
-            if controls { overlay }
+            if controls {
+                if locked { lockButton.frame(maxWidth: .infinity, alignment: .leading).padding() } else { overlay }
+            }
+            if let hint {
+                Text(hint).font(.headline.monospacedDigit()).foregroundStyle(.white)
+                    .padding(12).background(.black.opacity(0.6)).clipShape(RoundedRectangle(cornerRadius: 8))
+            }
             if !engine.status.isEmpty {
                 Text(engine.status)
                     .font(.footnote).foregroundStyle(.white)
@@ -69,6 +89,77 @@ struct PlayerView: View {
             if let source { CastView(url: source.url, title: engine.title, headers: engine.headers) }
         }
         .onChange(of: engine.subs) { addSubs() }
+        .sheet(isPresented: $episodes) { episodeSheet.presentationDetents([.medium, .large]) }
+    }
+
+    private var lockButton: some View {
+        Button(locked ? "解锁" : "锁定", systemImage: locked ? "lock.fill" : "lock.open") { locked.toggle() }
+            .labelStyle(.iconOnly).font(.title2).foregroundStyle(.white)
+            .padding(10).background(.black.opacity(0.4)).clipShape(Circle())
+    }
+
+    private var episodeSheet: some View {
+        NavigationStack {
+            let eps = engine.flags.indices.contains(engine.flagIndex) ? engine.flags[engine.flagIndex].episodes : []
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), spacing: 8)], spacing: 8) {
+                    ForEach(eps.indices, id: \.self) { i in
+                        Button { engine.jump(i); episodes = false } label: {
+                            Text(eps[i].name).lineLimit(1).frame(maxWidth: .infinity).padding(.vertical, 8)
+                        }
+                        .buttonStyle(.bordered).tint(i == engine.episodeIndex ? .accentColor : .secondary)
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("选集").navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    /// 横向：拖动快进（满屏宽 = 3 分钟）；竖向左半屏：亮度
+    private func drag(_ size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { g in
+                if dragStart == nil {
+                    let horizontal = abs(g.translation.width) > abs(g.translation.height)
+                    let left = g.startLocation.x < size.width / 2
+                    if !horizontal && !left { return } // 右半屏竖拖留给系统（音量需 MPVolumeView）
+                    dragStart = (Double(g.startLocation.x), horizontal ? engine.position : Double(UIScreen.main.brightness), horizontal)
+                }
+                guard let d = dragStart, let horizontal = d.horizontal else { return }
+                if horizontal {
+                    let t = min(max(d.value + Double(g.translation.width / size.width) * 180, 0), engine.duration)
+                    hint = "\(time(t)) / \(time(engine.duration))"
+                } else {
+                    let b = min(max(d.value - Double(g.translation.height / size.height), 0), 1)
+                    UIScreen.main.brightness = CGFloat(b)
+                    hint = "亮度 \(Int(b * 100))%"
+                }
+            }
+            .onEnded { g in
+                if let d = dragStart, d.horizontal == true {
+                    engine.seek(min(max(d.value + Double(g.translation.width / size.width) * 180, 0), engine.duration))
+                }
+                dragStart = nil
+                hint = nil
+            }
+    }
+
+    /// 长按 2 倍速，松开恢复
+    private var hold: some Gesture {
+        LongPressGesture(minimumDuration: 0.5)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+            .onChanged { v in
+                guard case .second = v, holdRate == nil else { return }
+                holdRate = engine.rate
+                engine.setRate(2)
+                hint = "2x 快进中"
+            }
+            .onEnded { _ in
+                if let r = holdRate { engine.setRate(r) }
+                holdRate = nil
+                hint = nil
+            }
     }
 
     private var overlay: some View {
@@ -80,19 +171,34 @@ struct PlayerView: View {
                 }
                 Text(engine.title).lineLimit(1)
                 Spacer()
-                if source != nil { Button("投屏", systemImage: "tv.and.mediabox") { casting = true } }
+                if source != nil {
+                    Button("画中画", systemImage: "pip.enter") { engine.togglePiP() }
+                    Button("投屏", systemImage: "tv.and.mediabox") { casting = true }
+                }
                 menu
-                if engine.hasNext { Button("下一集", systemImage: "forward.end.fill") { engine.next() } }
             }
             .labelStyle(.iconOnly)
             Spacer()
+            HStack {
+                lockButton
+                Spacer()
+                Button("旋转", systemImage: "rectangle.landscape.rotate") { rotate() }
+                    .labelStyle(.iconOnly).font(.title3)
+                    .padding(10).background(.black.opacity(0.4)).clipShape(Circle())
+            }
+            Spacer()
             HStack(spacing: 12) {
+                if engine.hasPrev { Button("上一集", systemImage: "backward.end.fill") { engine.prev() }.labelStyle(.iconOnly) }
                 Button(engine.isPlaying ? "暂停" : "播放", systemImage: engine.isPlaying ? "pause.fill" : "play.fill") { engine.toggle() }
                     .labelStyle(.iconOnly)
+                if engine.hasNext { Button("下一集", systemImage: "forward.end.fill") { engine.next() }.labelStyle(.iconOnly) }
                 Text(time(engine.position)).monospacedDigit()
                 Slider(value: Binding(get: { engine.position }, set: { engine.seek($0) }), in: 0...max(engine.duration, 1))
                     .accessibilityLabel("播放进度")
                 Text(time(engine.duration)).monospacedDigit()
+                if engine.flags.indices.contains(engine.flagIndex), engine.flags[engine.flagIndex].episodes.count > 1 {
+                    Button("选集") { episodes = true }
+                }
             }
             .font(.caption)
         }
@@ -106,6 +212,23 @@ struct PlayerView: View {
             Menu("倍速 \(String(format: "%g", engine.rate))x") {
                 ForEach([0.5, 0.75, 1, 1.25, 1.5, 2, 3] as [Float], id: \.self) { r in
                     Button("\(String(format: "%g", r))x") { engine.setRate(r) }
+                }
+            }
+            Menu("画面 \(engine.scale.rawValue)") {
+                ForEach(PlayerEngine.Scale.allCases, id: \.self) { m in Button(m.rawValue) { engine.scale = m } }
+            }
+            Button(engine.loop ? "关闭单集循环" : "单集循环") { engine.loop.toggle() }
+            let audios = engine.audioTracks()
+            if audios.count > 1 {
+                Menu("音轨") {
+                    ForEach(audios.indices, id: \.self) { i in
+                        Button((audios[i].isEnabled ? "✓ " : "") + audios[i].name) { engine.select(track: audios[i]) }
+                    }
+                }
+            }
+            if engine.parseList.count > 1 {
+                Menu("解析 \(engine.parseName)") {
+                    ForEach(engine.parseList, id: \.self) { p in Button(p.name) { engine.selectParse(p) } }
                 }
             }
             Menu("线路") {
@@ -146,6 +269,13 @@ struct PlayerView: View {
         } label: {
             Label("更多", systemImage: "ellipsis.circle")
         }
+    }
+
+    /// 横竖屏切换（对应原项目的旋转按钮）
+    private func rotate() {
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
+        let landscape = scene.effectiveGeometry.interfaceOrientation.isLandscape
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: landscape ? .portrait : .landscapeRight))
     }
 
     private func setSkip(opening: Double? = nil, ending: Double? = nil) {

@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import KSPlayer
 import Observation
 
@@ -63,6 +64,17 @@ final class PlayerEngine {
         flags.indices.contains(flagIndex) && episodeIndex + 1 < flags[flagIndex].episodes.count
     }
 
+    var hasPrev: Bool { episodeIndex > 0 }
+
+    /// 单集循环：播完重播当前集
+    var loop = false
+    /// 画面比例（对应 Setting.getScale）：fit 适应、fill 裁剪填充、stretch 拉伸
+    enum Scale: String, CaseIterable { case fit = "适应", fill = "填充", stretch = "拉伸" }
+    var scale = Scale.fit { didSet { applyScale() } }
+    /// 当前选用的解析接口名（parse=1 时生效）
+    var parseName: String { parse?.name ?? "" }
+    var parseList: [Parse] { parses }
+
     func start(api: SiteAPI, site: Site, flags: [Flag], flag: Int, episode: Int, vipFlags: [String],
                parses: [Parse] = [], parse: Parse? = nil, fetch: @escaping HTTP.Fetch = HTTP.live, resume: Double = 0) {
         self.api = api
@@ -104,6 +116,42 @@ final class PlayerEngine {
         report(force: true)
         resume = 0
         play(flag: flagIndex, episode: episodeIndex + 1)
+    }
+
+    func prev() {
+        guard hasPrev else { return }
+        report(force: true)
+        resume = 0
+        play(flag: flagIndex, episode: episodeIndex - 1)
+    }
+
+    /// 选集面板跳转
+    func jump(_ episode: Int) {
+        guard episode != episodeIndex else { return }
+        report(force: true)
+        resume = 0
+        play(flag: flagIndex, episode: episode)
+    }
+
+    /// 切换解析接口后重新取当前集
+    func selectParse(_ p: Parse) {
+        parse = p
+        resume = position
+        play(flag: flagIndex, episode: episodeIndex)
+    }
+
+    func audioTracks() -> [MediaPlayerTrack] { coordinator.playerLayer?.player.tracks(mediaType: .audio) ?? [] }
+
+    func select(track: MediaPlayerTrack) { coordinator.playerLayer?.player.select(track: track) }
+
+    func togglePiP() {
+        guard let layer = coordinator.playerLayer else { return }
+        layer.isPipActive.toggle()
+    }
+
+    private func applyScale() {
+        let mode: UIView.ContentMode = switch scale { case .fit: .scaleAspectFit; case .fill: .scaleAspectFill; case .stretch: .scaleToFill }
+        coordinator.playerLayer?.player.contentMode = mode
     }
 
     func toggle() {
@@ -234,6 +282,7 @@ final class PlayerEngine {
             watchdog?.cancel()
             status = ""
             if rate != 1 { coordinator.playbackRate = rate }
+            if scale != .fit { applyScale() }
             if pendingSeek > 1 {
                 coordinator.seek(time: pendingSeek)
                 pendingSeek = 0
@@ -246,7 +295,9 @@ final class PlayerEngine {
 
     private func finished(_ error: Error?) {
         // KSPlayerLayer 已先在两种内核间重试；这里的 error 是最终失败
-        if let error { fail(error.localizedDescription) } else { next() }
+        if let error { fail(error.localizedDescription) }
+        else if loop { coordinator.seek(time: 0); coordinator.playerLayer?.play() }
+        else { next() }
     }
 
     private func tick(_ current: Double, _ total: Double) {
