@@ -6,7 +6,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: "5DH75F6T3T"
 packages:
   # GPL-3.0：仅自用侧载；分发前需按 GPL 开源或替换
   KSPlayer:
@@ -36,11 +36,7 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         NSLocalNetworkUsageDescription: 用于发现局域网内的投屏设备（DLNA）
-    entitlements:
-      path: Seesee/Seesee.entitlements
-      properties:
-        # SSDP 组播发现 DLNA 设备；真机需在开发者账号开通该能力，侧载签名工具需保留此 entitlement
-        com.apple.developer.networking.multicast: true
+    # ponytail: 组播 entitlement（DLNA 发现）需付费账号 + Apple 审批，免费个人团队签不了，暂不启用
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.cleiyf.seesee
