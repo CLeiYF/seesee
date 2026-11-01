@@ -31,6 +31,8 @@ final class PlayerEngine {
 
     @ObservationIgnored let coordinator = KSVideoPlayer.Coordinator()
     @ObservationIgnored private(set) var url: URL?
+    /// 当前播放地址的请求头（投屏时提示）
+    @ObservationIgnored private(set) var headers: [String: String] = [:]
     @ObservationIgnored private(set) var options = KSOptions()
 
     @ObservationIgnored private var api: SiteAPI?
@@ -174,6 +176,7 @@ final class PlayerEngine {
         resume = 0
         options = o
         self.url = url
+        self.headers = headers
         subs = r.subs
         danmakuSources = r.danmaku
         danmaku = []

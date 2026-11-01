@@ -25,6 +25,8 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>用于发现局域网内的投屏设备（DLNA）</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

@@ -20,6 +20,7 @@ struct PlayerView: View {
     @State private var engine = PlayerEngine()
     @State private var source: Source?
     @State private var controls = true
+    @State private var casting = false
 
     /// 每次地址变化换一个 id，让 KSVideoPlayer 重建
     private struct Source: Identifiable {
@@ -60,6 +61,9 @@ struct PlayerView: View {
                          parses: parses, parse: parses.first, resume: resume)
         }
         .onDisappear { engine.stop() }
+        .sheet(isPresented: $casting) {
+            if let source { CastView(url: source.url, title: engine.title, headers: engine.headers) }
+        }
         .onChange(of: engine.subs) { addSubs() }
     }
 
@@ -72,6 +76,7 @@ struct PlayerView: View {
                 }
                 Text(engine.title).lineLimit(1)
                 Spacer()
+                if source != nil { Button("投屏", systemImage: "tv.and.mediabox") { casting = true } }
                 menu
                 if engine.hasNext { Button("下一集", systemImage: "forward.end.fill") { engine.next() } }
             }

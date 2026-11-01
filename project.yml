@@ -35,6 +35,12 @@ targets:
         UIBackgroundModes: [audio]
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+        NSLocalNetworkUsageDescription: 用于发现局域网内的投屏设备（DLNA）
+    entitlements:
+      path: Seesee/Seesee.entitlements
+      properties:
+        # SSDP 组播发现 DLNA 设备；真机需在开发者账号开通该能力，侧载签名工具需保留此 entitlement
+        com.apple.developer.networking.multicast: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.cleiyf.seesee
