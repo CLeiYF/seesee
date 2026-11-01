@@ -44,6 +44,8 @@ struct VodConfig: Decodable {
     var lives: [Live] = []
     var rules: [SniffRule] = []
     var ads: [String] = []
+    var proxy: [NetRules.ProxyRule] = []
+    var hosts: [String] = []
     var msg = ""
 
     init() {}
@@ -67,6 +69,8 @@ struct VodConfig: Decodable {
         lives = c.list(AnyKey("lives"))
         rules = c.list(AnyKey("rules"))
         ads = c.list(AnyKey("ads"))
+        proxy = c.list(AnyKey("proxy"))
+        hosts = c.list(AnyKey("hosts"))
         msg = c.str(AnyKey("msg"))
         var seen = Set<String>()
         sites = sites.filter { !$0.key.isEmpty && seen.insert($0.key).inserted }

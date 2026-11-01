@@ -170,6 +170,9 @@ final class JSRuntime: @unchecked Sendable {
 
 /// 同步网络请求（JS 线程内的 req 是同步语义）
 func syncFetch(_ session: URLSession, _ request: URLRequest) throws -> (Data, HTTPURLResponse?) {
+    let request = NetRules.rewrite(request)
+    // 只在用默认 session 时套代理规则（NoRedirect 等自定义 session 保持不变）
+    let session = session === URLSession.shared ? NetRules.session(for: request.url) : session
     var out: Swift.Result<(Data, HTTPURLResponse?), Error>!
     let done = DispatchSemaphore(value: 0)
     session.dataTask(with: request) { d, r, e in

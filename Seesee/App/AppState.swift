@@ -78,6 +78,7 @@ final class AppState {
         self.config = config
         configURL = url
         HTTP.hostHeaders = config.headers
+        NetRules.configure(proxy: config.proxy, hosts: config.hosts)
         Sniffer.rules = config.rules
         Sniffer.ads = config.ads
         let usable = config.homeSites.filter(\.isSupported)

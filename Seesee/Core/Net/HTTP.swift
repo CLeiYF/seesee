@@ -9,7 +9,8 @@ enum HTTP {
     nonisolated(unsafe) static var hostHeaders: [HostHeader] = []
 
     static let live: Fetch = { request in
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let request = NetRules.rewrite(request)
+        let (data, response) = try await NetRules.session(for: request.url).data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<400).contains(http.statusCode) {
             throw URLError(.badServerResponse)
         }

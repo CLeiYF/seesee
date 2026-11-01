@@ -104,4 +104,22 @@ final class SourceTests: XCTestCase {
         XCTAssertEqual(try HTTP.get("http://gslb.cmvideo.cn/x").value(forHTTPHeaderField: "User-Agent"), "okhttp/3.12.13")
         XCTAssertEqual(try HTTP.get("http://other.com/x").value(forHTTPHeaderField: "User-Agent"), HTTP.chrome)
     }
+
+    func testNetRulesHostsAndProxy() throws {
+        defer { NetRules.configure(proxy: [], hosts: []) }
+        let c = try VodConfig.parse(#"{"hosts":["cache.ott.*.itv.cmvideo.cn=base.cdn.cn","a.com=b.com"],"proxy":[{"name":"p","hosts":["google"],"urls":["http://127.0.0.1:7890"]}]}"#)
+        XCTAssertEqual(c.hosts.count, 2)
+        NetRules.configure(proxy: c.proxy, hosts: c.hosts)
+        // 包含匹配：与 OkDns 一致，整个域名替换为新域名，原 Host 保留在头里
+        let r = NetRules.rewrite(try HTTP.get("http://x.a.com/p?q=1"))
+        XCTAssertEqual(r.url?.absoluteString, "http://b.com/p?q=1")
+        XCTAssertEqual(r.value(forHTTPHeaderField: "Host"), "x.a.com")
+        // 正则整串匹配
+        XCTAssertEqual(NetRules.rewrite(try HTTP.get("http://cache.ott.bestlive.itv.cmvideo.cn/x")).url?.host, "base.cdn.cn")
+        XCTAssertEqual(NetRules.rewrite(try HTTP.get("http://other.org/x")).url?.host, "other.org")
+        // 代理只作用于命中的域名
+        XCTAssertFalse(NetRules.session(for: URL(string: "https://www.google.com")) === URLSession.shared)
+        XCTAssertTrue(NetRules.session(for: URL(string: "https://baidu.com")) === URLSession.shared)
+        XCTAssertTrue(NetRules.session(for: URL(string: "http://127.0.0.1:9978/proxy")) === URLSession.shared)
+    }
 }
