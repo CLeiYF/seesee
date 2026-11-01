@@ -17,6 +17,14 @@ final class PlayerEngine {
     var isPlaying = false
     var rate: Float = 1
     var subs: [Sub] = []
+    /// 弹幕
+    var danmaku: [DanmakuItem] = []
+    var danmakuSources: [DanmakuSource] = []
+    var showDanmaku = UserDefaults.standard.object(forKey: "danmaku.show") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(showDanmaku, forKey: "danmaku.show") }
+    }
+    /// 最近一次进度回调的时刻，弹幕层据此插值
+    var positionAt = Date()
     var skip = PlaybackSkip()
     /// 定时关闭的截止时间
     var sleepAt: Date?
@@ -122,6 +130,16 @@ final class PlayerEngine {
         }
     }
 
+    /// 拉取并解析弹幕（失败静默）
+    func loadDanmaku(_ src: DanmakuSource) {
+        let url = LocalServer.shared.convert(src.url)
+        Task {
+            guard let req = try? HTTP.get(url, timeout: 15), let data = try? await fetch(req) else { return }
+            let items = DanmakuParser.parse(HTTP.string(data.gunzipped ?? data))
+            danmaku = items
+        }
+    }
+
     func stop() {
         report(force: true)
         watchdog?.cancel()
@@ -157,6 +175,9 @@ final class PlayerEngine {
         options = o
         self.url = url
         subs = r.subs
+        danmakuSources = r.danmaku
+        danmaku = []
+        if let first = r.danmaku.first { loadDanmaku(first) }
         status = "缓冲中…"
         onURL(url, o)
         startWatchdog()
@@ -199,6 +220,7 @@ final class PlayerEngine {
     private func tick(_ current: Double, _ total: Double) {
         guard current.isFinite, total.isFinite else { return }
         position = current
+        positionAt = Date()
         duration = total
         if skip.shouldEnd(position: current, duration: total), hasNext {
             next()

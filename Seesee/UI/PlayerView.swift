@@ -37,6 +37,10 @@ struct PlayerView: View {
                     .ignoresSafeArea()
                     .onTapGesture { withAnimation { controls.toggle() } }
             }
+            if engine.showDanmaku, !engine.danmaku.isEmpty {
+                DanmakuOverlay(items: engine.danmaku, time: engine.position, at: engine.positionAt, playing: engine.isPlaying)
+                    .ignoresSafeArea()
+            }
             SubtitleOverlay(model: engine.coordinator.subtitleModel)
                 .allowsHitTesting(false)
             if controls { overlay }
@@ -107,6 +111,14 @@ struct PlayerView: View {
                     Button("关闭") { engine.coordinator.subtitleModel.selectedSubtitleInfo = nil }
                     ForEach(subtitles, id: \.subtitleID) { info in
                         Button(info.name) { engine.coordinator.subtitleModel.selectedSubtitleInfo = info }
+                    }
+                }
+            }
+            if !engine.danmakuSources.isEmpty {
+                Menu("弹幕") {
+                    Button(engine.showDanmaku ? "隐藏弹幕" : "显示弹幕") { engine.showDanmaku.toggle() }
+                    if engine.danmakuSources.count > 1 {
+                        ForEach(engine.danmakuSources, id: \.url) { src in Button(src.name) { engine.loadDanmaku(src) } }
                     }
                 }
             }

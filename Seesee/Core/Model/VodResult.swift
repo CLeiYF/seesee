@@ -15,6 +15,7 @@ struct VodResult: Decodable {
     var msg = ""
     var code: Int?
     var subs: [Sub] = []
+    var danmaku: [DanmakuSource] = []
 
     init() {}
 
@@ -33,6 +34,7 @@ struct VodResult: Decodable {
         msg = c.str(AnyKey("msg"))
         code = c.int(AnyKey("code"))
         subs = c.list(AnyKey("subs"))
+        danmaku = DanmakuSource.list(c, AnyKey("danmaku"))
     }
 
     static func json(_ text: String) -> VodResult {
