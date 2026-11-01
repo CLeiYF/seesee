@@ -20,6 +20,13 @@ struct LiveView: View {
     @State private var loading = false
     /// 已加载过的配置地址
     @State private var loadedFor: String?
+    @State private var fullscreen = false
+    /// 收藏的频道名（对应 LiveActivity 的 keep），存本机
+    @AppStorage("live.keep") private var keepRaw = ""
+    /// 上次观看的频道名（对应 Setting.keep），重进时恢复
+    @AppStorage("live.last") private var lastChannel = ""
+    private var kept: [String] { keepRaw.split(separator: "\n").map(String.init) }
+    private static let keepGroup = "★ 收藏"
 
     struct PlayItem: Identifiable {
         let id = UUID()
@@ -28,7 +35,16 @@ struct LiveView: View {
         let title: String
     }
 
-    private var visibleGroups: [LiveGroup] { groups.filter { $0.pass.isEmpty || unlocked.contains($0.name) } }
+    private var visibleGroups: [LiveGroup] {
+        let open = groups.filter { $0.pass.isEmpty || unlocked.contains($0.name) }
+        let fav = kept.compactMap { n in open.lazy.flatMap(\.channels).first { $0.name == n } }
+        guard !fav.isEmpty else { return open }
+        var g = LiveGroup(name: Self.keepGroup)
+        g.channels = fav
+        return [g] + open
+    }
+    /// 当前分组里的频道（上一个 / 下一个台用）
+    private var currentChannels: [Channel] { visibleGroups[safe: groupIndex]?.channels ?? [] }
     private var locked: [LiveGroup] { groups.filter { !$0.pass.isEmpty && !unlocked.contains($0.name) } }
 
     var body: some View {
@@ -82,13 +98,69 @@ struct LiveView: View {
     @ViewBuilder private var player: some View {
         ZStack {
             Color.black
-            if let p = playURL {
+            if let p = playURL, !fullscreen {
                 LivePlayer(item: p, timeout: live.timeout) { nextLine() }.id(p.id)
-            } else {
+            } else if playURL == nil {
                 Image(systemName: "tv").font(.largeTitle).foregroundStyle(.secondary)
             }
+            if playURL != nil, !fullscreen { controlBar }
         }
         .aspectRatio(16 / 9, contentMode: .fit)
+        .fullScreenCover(isPresented: $fullscreen) {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                if let p = playURL { LivePlayer(item: p, timeout: live.timeout) { nextLine() }.id(p.id).ignoresSafeArea() }
+                controlBar
+            }
+            .persistentSystemOverlays(.hidden)
+            .statusBarHidden()
+        }
+    }
+
+    /// 频道名、换线、上下台、收藏、全屏
+    private var controlBar: some View {
+        VStack {
+            Spacer()
+            HStack(spacing: 14) {
+                Button("上一个频道", systemImage: "chevron.up") { step(-1) }
+                Button("下一个频道", systemImage: "chevron.down") { step(1) }
+                Text(playURL?.title ?? "").lineLimit(1).font(.caption)
+                Spacer()
+                if let c = channel, c.urls.count > 1 {
+                    Menu("线路 \(line + 1)/\(c.urls.count)", systemImage: "point.3.connected.trianglepath.dotted") {
+                        ForEach(c.urls.indices, id: \.self) { i in
+                            Button("线路 \(i + 1)") { line = i; play(c.urls[i], title: "\(c.name) 线路\(i + 1)") }
+                        }
+                    }
+                }
+                if let c = channel {
+                    let on = kept.contains(c.name)
+                    Button(on ? "取消收藏" : "收藏", systemImage: on ? "star.fill" : "star") { toggleKeep(c) }
+                }
+                Button(fullscreen ? "退出全屏" : "全屏",
+                       systemImage: fullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") { fullscreen.toggle() }
+            }
+            .labelStyle(.iconOnly)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .foregroundStyle(.white)
+            .background(LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .top, endPoint: .bottom))
+        }
+    }
+
+    private func step(_ d: Int) {
+        let list = currentChannels
+        guard !list.isEmpty else { return }
+        let i = channel.flatMap { c in list.firstIndex(of: c) } ?? -d
+        let n = list[(i + d + list.count) % list.count]
+        line = 0
+        channel = nil // 避免 select 把同频道当作换线
+        select(n)
+    }
+
+    private func toggleKeep(_ c: Channel) {
+        var k = kept
+        if let i = k.firstIndex(of: c.name) { k.remove(at: i) } else { k.insert(c.name, at: 0) }
+        keepRaw = k.joined(separator: "\n")
     }
 
     private var lists: some View {
@@ -150,7 +222,12 @@ struct LiveView: View {
             groups = r.groups
             groupIndex = 0
             unlocked = []
-            if let first = visibleGroups.first?.channels.first { select(first) }
+            // 恢复上次观看的频道，没有就播第一个
+            let all = visibleGroups.flatMap(\.channels)
+            if let last = all.first(where: { $0.name == lastChannel }) ?? visibleGroups.first?.channels.first {
+                if let g = visibleGroups.firstIndex(where: { $0.channels.contains(last) }) { groupIndex = g }
+                select(last)
+            }
             xml = await LiveLoader.xmltv(live.epgXml, timeZone: live.zone, fetch: state.fetch)
             if let channel { await loadEPG(channel) }
         } catch {
@@ -161,6 +238,7 @@ struct LiveView: View {
     private func select(_ c: Channel) {
         line = channel == c ? (line + 1) % max(c.urls.count, 1) : 0
         channel = c
+        lastChannel = c.name
         play(c.urls[safe: line] ?? "", title: c.name)
         Task { await loadEPG(c) }
     }
