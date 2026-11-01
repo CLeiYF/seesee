@@ -7,55 +7,52 @@
 ## 功能
 
 ### 配置
-- 从 URL 或本地文件导入；支持明文、base64（`xxxxxxxx**` 标记）、AES（`2423` 开头）三种格式
+- 从 URL 或本地文件导入；支持明文、base64（`xxxxxxxx**` 标记）、AES（`2423` 开头）三种格式；按 OkHttp UA 拉取（部分配置服务器按 UA 分流）
 - 相对路径（`./`、`../`）自动补全；多仓库（`urls`）可切换；配置历史；网络失败回退到上次缓存
-- 读取 `sites`、`lives`、`parses`、`flags`、`rules`、`ads`、`headers`、`notice`
+- 读取 `sites`、`lives`、`parses`、`flags`、`rules`、`ads`、`headers`、`proxy`、`hosts`、`notice`
 
 ### 点播
 | 站点类型 | 说明 | 支持 |
 |---|---|---|
-| type 0 | 苹果 CMS XML | ✅ |
-| type 1 / 2 | 苹果 CMS JSON（含筛选） | ✅ |
-| type 4 | 自定义接口（ext 可为 URL） | ✅ |
-| type 3 `.js` | JS 爬虫（JavaScriptCore） | ✅ |
-| type 3 `csp_` / `.py` | Java jar / Python 爬虫 | ❌ iOS 无法运行 |
+| 0 / 1 / 2 | 苹果 CMS XML / JSON | ✅ |
+| 3 + `.js` | JS 爬虫（JavaScriptCore），兼容 cat 与 `export default` 两种写法 | ✅ |
+| 3 + `csp_Xxx` | jar 爬虫：内置 JS 重写版（见下），或从外接 JS 仓库加载 `Xxx.js` | 部分 |
+| 4 | 自定义 HTTP 接口（如 drpy-node T4） | ✅ |
+| 3 + `.py` | Python 爬虫 | ❌ |
 
-- 首页推荐与分类、筛选、无限滚动；rect / oval / list 卡片样式与比例
-- 详情页：线路、选集、倒序、收藏、继续观看
-- 多站并发搜索（最多 5 个同时请求），结果按站点分组；搜索历史；关键词繁转简；可按站点关闭搜索
+- 内置 JS 版 jar 爬虫（`Seesee/Resources/js/spider/`）：Douban、Jianpian、Dm84、Ysj、Zxzj、FirstAid、Kanqiu、XPath / XPathFilter / XPathMac / XPathMacFilter、AppYsV2、AList、WebDAV、Quark、UC、TianYi、Pan123、Ali、YiDongYun、TgSearch*（盘搜）、DianYingYunJi、KuaKeS、Xb6v
+- 网盘（夸克、UC、天翼、123、阿里、移动、百度）凭证与安卓一致，取自站点 `ext`（`cookie`、`uccookie`、`tianyicookie`、`token` 等）
+- 首页分类、筛选、分页；文件夹浏览（`vod_tag=folder`）；`msearch:` 推荐项跳转搜索
+- 聚合搜索（并发、可按站点筛选、滚动翻页）；详情页换源（快搜同名）、刷新、点演员导演搜索
+- 海报支持 `url@Referer=…@User-Agent=…` 请求头写法
 
 ### 解析与嗅探
-- parse type 0（网页嗅探）、1（JSON 解析）、4（超级解析：JSON 与网页嗅探并发，取最先成功）
-- 支持 `flags` 和 playUrl 的 `json:` / `parse:` 前缀
-- 网页嗅探用隐藏的 WKWebView 加载页面，注入脚本记录 fetch / XHR / `src` 赋值 / DOM 节点 / 资源加载记录；支持嵌套播放页、`rules`（hosts / regex / exclude / script）与 `ads` 拦截
+- parse 0（嗅探）、1（JSON）、4（多个解析并发取最快）；播放中可切换解析接口
+- `flags`、`rules`、`ads` 过滤
 
 ### 播放
-- [KSPlayer](https://github.com/kingslay/KSPlayer)：先用 AVPlayer，失败自动切 FFmpeg 内核（FLV / MKV / RTMP 等）
-- 倍速、换线路、下一集、超时自动换线（站点 `changeable=0` 时不换）
-- 外挂字幕（结果里的 `subs`）与内嵌字幕
-- 弹幕：B 站 XML / TXT，滚动、顶部、底部三类，可开关、切换弹幕源
-- 跳过片头片尾（按影片记忆）、定时关闭、进度记忆与续播
-- 后台音频（Info.plist 已开 `audio` 后台模式，音频会话由 KSPlayer 设置）；画中画和 AirPlay 依赖 KSPlayer 自带能力，App 内暂无专门入口
+- KSPlayer：AVPlayer 优先，失败自动切 FFmpeg；超时或失败自动换线（可关闭）
+- 手势：单击显隐、双击暂停、横向拖动快进、左半屏竖拖亮度、长按 2 倍速；锁定、旋转
+- 倍速（可设默认）、画面比例、音轨、字幕（结果内 subs）、画中画、选集面板、上一集 / 下一集、单集循环、片头片尾跳过、续播
+- 弹幕：B 站 XML / TXT，滚动、顶部、底部；可开关、切换源；可接外部弹幕 API（兼容 FongMi 自定义接口，如 danmu_api）
+- DLNA 投屏、推送到 FongMi 设备
 
 ### 直播
-- m3u（`tvg-*`、`group-title`、`catchup`、`#EXTVLCOPT` / `#EXTHTTP` / `#KODIPROP`、`|Header=`）、txt（`#genre#`、`#` 分隔多线路）、JSON 分组
-- `名称_密码` 加密分组，解锁后可见；频道自动编号；继承直播源的 ua / referer / origin / header
-- EPG：按频道 JSON 接口（`{name}` / `{id}` / `{date}`）与 xmltv（含 `.gz`）
-- 回看：`append` / `default` 两种写法与时间占位符，点已播完的节目即可回看
-- 多直播源切换，`boot` 指定默认
+- m3u / txt / json 源，`api` 可为 JS 爬虫（`live()`）
+- EPG 节目单、回看、密码分组
+- 全屏与控制栏、频道收藏、上下切台、手动换线、记住上次频道；切换 tab 时暂停
 
 ### 其他
-- **本地代理服务**：App 内监听 `127.0.0.1:9978`，提供 `/proxy`（JS 爬虫的 `getProxy` / `js2Proxy` / `proxy://`）与 `/cache`
-- **投屏**：DLNA（SSDP 发现 + AVTransport），也能推送给局域网里的 FongMi 影视设备
-- **我的**：观看记录、收藏、搜索站点开关、备份导出 / 导入（JSON 文件）
+- 观看记录、收藏、JSON 备份与恢复、无痕模式、清除缓存
+- 本地服务（`/proxy`、`/cache`）供 JS 爬虫本地代理
 
 ### 未实现
-- jar / py 爬虫、闭源 `.so` 插件（迅雷、TVBus 等）：iOS 平台限制
-- parse type 2 / 3：依赖 jar
-- DRM（ClearKey / Widevine）、YouTube 解析
-- DLNA 接收端与设备互推的接收：需要把服务暴露到局域网，且 iOS 后台无法常驻
-- `hosts` 改写与 DoH
-- 直播源 `api` 指向 JS 爬虫（`liveContent`）
+- Python 爬虫、parse type 2 / 3（依赖 jar）
+- 未移植成 JS 的 jar 爬虫（站点已失效的、成人站点、本机功能类）
+- 迅雷 / 磁力 / ed2k、TVBus、Force 等 P2P 协议，Widevine DRM
+- DoH；`hosts` 只改写 URL，HTTPS 下仍按新域名校验证书
+- 接收投屏、被推送、设备间同步（iOS 后台不能常驻服务）
+- 热搜与联想词、外挂本地字幕、下载、壁纸主题
 
 ## 环境要求
 
@@ -101,7 +98,19 @@ xcodebuild test -project Seesee.xcodeproj -scheme Seesee \
   -destination 'platform=iOS Simulator,name=iPhone 17'
 ```
 
-XCTest 共 70 个用例，覆盖 Core 的纯逻辑：配置解码与相对路径、CMS XML / JSON 解析与请求参数、JS 运行时（模块改写、`req`、加解密、cheerio、两种爬虫写法）、解析与嗅探规则、直播源 / EPG / 回看、弹幕解析与轨道分配、本地服务、DLNA 报文、观看记录与备份。UI 靠手动或模拟器点击测试。
+XCTest 共 84 个用例，覆盖 Core 的纯逻辑：配置解码与相对路径、CMS XML / JSON 解析与请求参数、JS 运行时（模块改写、`req`、加解密、cheerio、两种爬虫写法、内置爬虫）、解析与嗅探规则、proxy / hosts、直播源 / EPG / 回看、弹幕解析与外接弹幕 API、本地服务、DLNA 报文、观看记录与备份。UI 靠手动或模拟器点击测试。
+
+联网检查（依赖第三方站点，结果随站点状态变化）：
+
+```bash
+# 内置 JS 爬虫冒烟（Node + curl 模拟 req）
+NO_PROXY_ALL=1 node scripts/spider-smoke.mjs            # 全部
+NO_PROXY_ALL=1 node scripts/spider-smoke.mjs Jianpian   # 单个
+
+# 在真实 JavaScriptCore 里跑网盘爬虫
+TEST_RUNNER_SEESEE_LIVE=1 xcodebuild test -project Seesee.xcodeproj -scheme Seesee \
+  -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SeeseeTests/LiveSpiderTests
+```
 
 ### 调试启动参数（仅 DEBUG）
 
@@ -112,6 +121,10 @@ XCTest 共 70 个用例，覆盖 Core 的纯逻辑：配置解码与相对路径
 | `-config <url>` | 启动时直接加载这个配置地址 |
 | `-tab <序号>` | 初始 tab：0 首页、1 直播、2 搜索、3 我的 |
 | `-play <siteKey>/<vodId>/<线路序号>` | 加载完成后直接打开该影片并播放 |
+| `-search <关键词>` | 加载完成后直接搜索 |
+| `-folder <siteKey>/<id>` | 加载完成后直接打开文件夹 |
+
+`vodId` 含 `/` 时用 `%2F` 编码。
 
 ```bash
 xcrun simctl launch booted com.cleiyf.seesee -config http://127.0.0.1:8765/config.json -tab 1
