@@ -35,6 +35,7 @@ final class PlayerEngine {
     @ObservationIgnored private var sleeper: Task<Void, Never>?
     @ObservationIgnored private var tried = Set<Int>()
     @ObservationIgnored private var resume: Double = 0
+    @ObservationIgnored private var pendingSeek: Double = 0
     @ObservationIgnored private var lastReport: Double = 0
     /// (线路, 集名, 进度秒, 时长秒)
     @ObservationIgnored var onProgress: (String, String, Double, Double) -> Void = { _, _, _, _ in }
@@ -150,7 +151,8 @@ final class PlayerEngine {
         if !headers.isEmpty { o.appendHeader(headers) }
         if let ua = headers.first(where: { $0.key.lowercased() == "user-agent" })?.value { o.userAgent = ua }
         if let ref = headers.first(where: { $0.key.lowercased() == "referer" })?.value { o.referer = ref }
-        o.startPlayTime = skip.start(resume: resume)
+        // KSAVPlayer 忽略 startPlayTime，统一在 readyToPlay 时 seek
+        pendingSeek = skip.start(resume: resume)
         resume = 0
         options = o
         self.url = url
@@ -179,6 +181,10 @@ final class PlayerEngine {
             watchdog?.cancel()
             status = ""
             if rate != 1 { coordinator.playbackRate = rate }
+            if pendingSeek > 1 {
+                coordinator.seek(time: pendingSeek)
+                pendingSeek = 0
+            }
         case .error:
             fail("播放失败")
         default: break
