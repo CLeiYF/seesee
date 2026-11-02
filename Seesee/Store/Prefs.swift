@@ -22,6 +22,12 @@ enum Prefs {
         set { d.set(newValue, forKey: "pref.incognito") }
     }
 
+    /// Emby 类站点总开关：关闭后首页站点列表和搜索里都不出现
+    static var emby: Bool {
+        get { d.object(forKey: "pref.emby") as? Bool ?? true }
+        set { d.set(newValue, forKey: "pref.emby") }
+    }
+
     /// 清缓存：URLCache + JS 爬虫上下文（下次使用重新加载脚本）
     static func clearCache() {
         URLCache.shared.removeAllCachedResponses()

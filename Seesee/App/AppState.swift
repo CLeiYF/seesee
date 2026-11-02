@@ -28,8 +28,19 @@ final class AppState {
 
     func site(_ key: String) -> Site? { config.sites.first { $0.key == key } }
 
-    /// 参与搜索的站点（配置 searchable 且用户未关闭）
-    var searchSites: [Site] { config.sites.filter { $0.isSupported && library.isSearchable($0) } }
+    /// Emby 类站点总开关（设置页），关闭时首页列表和搜索都排除
+    var showEmby = Prefs.emby {
+        didSet {
+            Prefs.emby = showEmby
+            if !showEmby, home?.isEmby == true { home = homeSites.first(where: \.isSupported) }
+        }
+    }
+
+    /// 首页可选站点：配置未隐藏，且按 Emby 开关过滤
+    var homeSites: [Site] { config.homeSites.filter { showEmby || !$0.isEmby } }
+
+    /// 参与搜索的站点（配置 searchable、用户未关闭、Emby 开关允许）
+    var searchSites: [Site] { config.sites.filter { $0.isSupported && (showEmby || !$0.isEmby) && library.isSearchable($0) } }
 
     /// 启动时恢复最近一次使用的配置
     func restore() async {
@@ -88,7 +99,7 @@ final class AppState {
         NetRules.configure(proxy: config.proxy, hosts: config.hosts)
         Sniffer.rules = config.rules
         Sniffer.ads = config.ads
-        let usable = config.homeSites.filter(\.isSupported)
+        let usable = homeSites.filter(\.isSupported)
         home = usable.first { $0.key == key } ?? usable.first
     }
 }

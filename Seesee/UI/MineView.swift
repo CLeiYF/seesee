@@ -23,6 +23,12 @@ struct MineView: View {
                 NavigationLink("参与搜索的站点（\(state.searchSites.count)）", value: MinePage.sites)
             }
             Section {
+                @Bindable var state = state
+                Toggle("Emby 站点", isOn: $state.showEmby)
+            } footer: {
+                Text("关闭后首页站点列表和搜索里不再出现 Emby 类站点。")
+            }
+            Section {
                 TextField(String("弹幕 API，如 http://192.168.1.7:9321"), text: $danmakuAPI)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                     .onChange(of: danmakuAPI) { DanmakuAPI.base = danmakuAPI }
@@ -133,7 +139,7 @@ struct SearchSitesView: View {
     @Environment(AppState.self) private var state
 
     var body: some View {
-        List(state.config.sites.filter { $0.isSupported && $0.searchable == 1 }) { site in
+        List(state.config.sites.filter { $0.isSupported && $0.searchable == 1 && (state.showEmby || !$0.isEmby) }) { site in
             Toggle(site.name, isOn: Binding(
                 get: { state.library.isSearchable(site) },
                 set: { state.library.setSearchable(site.key, $0) }))

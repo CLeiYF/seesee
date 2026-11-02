@@ -29,7 +29,7 @@ struct ConfigView: View {
                 }
                 if !state.config.sites.isEmpty {
                     Section("首页站点") {
-                        ForEach(state.config.homeSites) { site in
+                        ForEach(state.homeSites) { site in
                             Button {
                                 state.setHome(site)
                                 dismiss()
