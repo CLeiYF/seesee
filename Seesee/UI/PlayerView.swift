@@ -188,6 +188,14 @@ struct PlayerView: View {
                 menu
             }
             .labelStyle(.iconOnly)
+            // 顶部正中的当前时间，随控件一起显隐
+            .overlay {
+                TimelineView(.everyMinute) { ctx in
+                    Text(ctx.date, format: .dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
+                        .monospacedDigit()
+                }
+                .allowsHitTesting(false)
+            }
             Spacer()
             HStack {
                 lockButton
