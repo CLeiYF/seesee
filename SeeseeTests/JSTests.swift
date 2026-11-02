@@ -234,6 +234,10 @@ final class JSTests: XCTestCase {
         XCTAssertEqual(Site.spiderCandidates("./py/爱听音乐.py"), [])
         XCTAssertEqual(Site.spiderCandidates("csp_Jpys", repo: ""), ["assets://js/spider/JPYS.js"])
         XCTAssertEqual(Site.spiderCandidates("csp_Wogg", repo: ""), ["assets://js/spider/Wogg.js"])
+        XCTAssertEqual(Site.bundledSpider("csp_PanWebShareHJ"), "assets://js/spider/PanWebShareHJ.js")
+        XCTAssertEqual(Site.bundledSpider("csp_Bili"), "assets://js/spider/BiliCsp.js")
+        // 4KZhinan 在 custom_spider_modified.jar 里没有实现
+        XCTAssertNil(Site.bundledSpider("csp_4KZhinan"))
     }
 
     /// 仓库里的脚本加载失败时退回下一个实现

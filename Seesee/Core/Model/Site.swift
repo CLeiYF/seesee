@@ -109,6 +109,15 @@ struct Site: Decodable, Hashable, Identifiable {
         "Emby": "Emby",
         "Jpys": "JPYS",
         "Wogg": "Wogg",
+        "PanWebShare": "PanWebShare",
+        "PanWebShareHJ": "PanWebShareHJ",
+        "AiPan": "AiPan",
+        "HDmoli": "HDmoli",
+        "ShuangXing": "ShuangXing",
+        "Yidong4K": "Yidong4K",
+        "Gz360": "Gz360",
+        "TongQu": "TongQu",
+        "Bili": "BiliCsp",
     ]
 
     /// `csp_Xxx` → `assets://js/spider/Xxx.js`，没有内置版本返回 nil
