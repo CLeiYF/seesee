@@ -52,4 +52,25 @@ final class ServerTests: XCTestCase {
         XCTAssertEqual(String(decoding: data, as: UTF8.self), "hello world")
         XCTAssertEqual((res as? HTTPURLResponse)?.value(forHTTPHeaderField: "X-Test"), "1")
     }
+
+    /// 更新包里的网盘凭证写入 JS 网盘库存储；包内值没变时不覆盖网盘库刷新后写回的值
+    func testItvSeedsPanCreds() {
+        let store = UserDefaults(suiteName: "seed-test")!
+        store.removePersistentDomain(forName: "seed-test")
+        var files = ["TVBox/quark_cookie.txt": #"{"nickname":"n","cookie":"q=1"}"#,
+                     "TVBox/uc_token.txt": #"{"refresh_token":"r1","access_token":"a"}"#]
+        let read: (String) -> Data? = { files[$0].map { Data($0.utf8) } }
+        ItvBootstrap.seedPanCreds(store: store, read: read)
+        XCTAssertEqual(store.string(forKey: "cache_pan_quark_cookie"), "q=1")
+        XCTAssertEqual(store.string(forKey: "cache_pan_uc_token_cookie"), "r1")
+        XCTAssertNil(store.string(forKey: "cache_pan_baidu_cookie"))
+
+        store.set("r2", forKey: "cache_pan_uc_token_cookie") // uc.js 刷新后写回
+        ItvBootstrap.seedPanCreds(store: store, read: read)
+        XCTAssertEqual(store.string(forKey: "cache_pan_uc_token_cookie"), "r2")
+
+        files["TVBox/uc_token.txt"] = #"{"refresh_token":"r3"}"# // 更新包换了新值
+        ItvBootstrap.seedPanCreds(store: store, read: read)
+        XCTAssertEqual(store.string(forKey: "cache_pan_uc_token_cookie"), "r3")
+    }
 }

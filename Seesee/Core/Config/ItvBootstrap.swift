@@ -39,7 +39,25 @@ enum ItvBootstrap {
             }
         }
         guard let text = try? String(contentsOf: configFile, encoding: .utf8) else { throw lastError }
+        seedPanCreds()
         return (configFile.absoluteString, text)
+    }
+
+    /// 更新包 TVBox/ 下的网盘凭证 → JS 网盘库的 local('pan', key)（pan/common.js cred()）。
+    /// 包内值变了才覆盖，避免把 uc.js 刷新后写回的 refresh_token 换成旧的。
+    static func seedPanCreds(store: UserDefaults = JSRuntime.store, read: (String) -> Data? = file) {
+        // 文件 → (JSON 字段, 网盘库凭证键)
+        let map = [("quark_cookie.txt", "cookie", "quark_cookie"), ("uc_cookie.txt", "cookie", "uc_cookie"),
+                   ("uc_token.txt", "refresh_token", "uc_token_cookie"), ("baidu.txt", "cookie", "baidu_cookie")]
+        for (name, field, key) in map {
+            guard let data = read("TVBox/" + name),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let value = (obj[field] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { continue }
+            let seeded = "itv.seeded." + key
+            guard store.string(forKey: seeded) != value else { continue }
+            store.set(value, forKey: "cache_pan_" + key)
+            store.set(value, forKey: seeded)
+        }
     }
 
     /// 读包内版本号，与本地不同（或本地缺配置）才重新解压
