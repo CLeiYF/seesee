@@ -185,9 +185,9 @@ final class JSTests: XCTestCase {
     func testBundledJarSpiderMapping() {
         XCTAssertEqual(Site.bundledSpider("csp_DoubanLocal"), "assets://js/spider/Douban.js")
         XCTAssertEqual(Site.bundledSpider("csp_Douban"), "assets://js/spider/Douban.js")
-        XCTAssertNil(Site.bundledSpider("csp_Wogg"))
+        XCTAssertNil(Site.bundledSpider("csp_Nope"))
         XCTAssertTrue(Site(key: "d", api: "csp_DoubanLocal", type: 3).isSupported)
-        XCTAssertFalse(Site(key: "w", api: "csp_Wogg", type: 3).isSupported)
+        XCTAssertFalse(Site(key: "w", api: "csp_Nope", type: 3).isSupported)
     }
 
     /// 内置 Douban.js：请求 frodo 接口、msearch id、带 Referer 的图片、筛选拼 tags
@@ -226,12 +226,14 @@ final class JSTests: XCTestCase {
     func testSpiderCandidatesRepoThenBundled() {
         XCTAssertEqual(Site.spiderCandidates("csp_DoubanLocal", repo: "https://r/js"),
                        ["https://r/js/DoubanLocal.js", "assets://js/spider/Douban.js"])
-        XCTAssertEqual(Site.spiderCandidates("csp_Wogg", repo: "https://r/js/"), ["https://r/js/Wogg.js"])
-        XCTAssertEqual(Site.spiderCandidates("csp_Wogg", repo: ""), [])
+        XCTAssertEqual(Site.spiderCandidates("csp_Wogg", repo: "https://r/js/"), ["https://r/js/Wogg.js", "assets://js/spider/Wogg.js"])
+        XCTAssertEqual(Site.spiderCandidates("csp_Nope", repo: ""), [])
         XCTAssertEqual(Site.spiderCandidates("https://x/a.js", repo: "https://r/"), [])
         XCTAssertEqual(Site.spiderCandidates("./python/JPYS.py", repo: "https://r/"), ["assets://js/spider/JPYS.js"])
         XCTAssertEqual(Site.spiderCandidates("./python/bilibili_hipy.py"), ["assets://js/spider/Bili.js"])
         XCTAssertEqual(Site.spiderCandidates("./py/爱听音乐.py"), [])
+        XCTAssertEqual(Site.spiderCandidates("csp_Jpys", repo: ""), ["assets://js/spider/JPYS.js"])
+        XCTAssertEqual(Site.spiderCandidates("csp_Wogg", repo: ""), ["assets://js/spider/Wogg.js"])
     }
 
     /// 仓库里的脚本加载失败时退回下一个实现

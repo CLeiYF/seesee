@@ -107,6 +107,8 @@ struct Site: Decodable, Hashable, Identifiable {
         "KuaKeS": "KuaKeS",
         "Xb6v": "Xb6v",
         "Emby": "Emby",
+        "Jpys": "JPYS",
+        "Wogg": "Wogg",
     ]
 
     /// `csp_Xxx` → `assets://js/spider/Xxx.js`，没有内置版本返回 nil
@@ -120,6 +122,9 @@ struct Site: Decodable, Hashable, Identifiable {
         get { UserDefaults.standard.string(forKey: "spider.repo") ?? "" }
         set { UserDefaults.standard.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "spider.repo") }
     }
+
+    /// Emby 类站点（jar 的 csp_Emby 或 py 版 emby.py）
+    var isEmby: Bool { api == "csp_Emby" || api.hasSuffix("/emby.py") }
 
     /// itv 配置里的 py 爬虫（文件名 → 内置 JS 版）
     static let bundledPySpiders: [String: String] = [
